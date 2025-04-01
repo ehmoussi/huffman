@@ -6,12 +6,16 @@
 
 #define MAX_CHAR 256
 
+/// @brief Prints an error message to stderr and exits with the given status
+/// @param message Error message to print
+/// @param status Exit status code
 void exit_error(char *message, int status)
 {
     fprintf(stderr, "%s", message);
     exit(status);
 }
 
+/// @brief Exits the program due to a failed memory allocation
 void exit_failed_allocation()
 {
     exit_error("ERROR: failed to allocate\n", 1);
@@ -158,32 +162,42 @@ void print_node(Node *node)
         printf(":%" PRIuPTR, node->freq);
     else
         printf("%c:%" PRIuPTR, node->c, node->freq);
-    printf(" {");
-    print_node(node->left);
-    printf(", ");
-    print_node(node->right);
-    printf("}");
+    if (node->left != NULL || node->right != NULL)
+    {
+        printf(" {");
+        print_node(node->left);
+        printf(", ");
+        print_node(node->right);
+        printf("}");
+    }
 }
 
-/// @brief Generates a Huffman tree from character frequencies
-/// @param frequencies Array of character frequencies
-/// @param max_nodes Maximum number of nodes that can be created
-/// @return Root node of the generated Huffman tree
-Node *generate_tree(size_t *frequencies, size_t max_nodes)
+/// @brief Structure to hold message information for Huffman encoding
+/// @field chars Array of unique characters in the message
+/// @field freqs Array of frequencies for each character
+/// @field length Number of unique characters
+typedef struct MessageInfo
 {
+    char *chars;
+    size_t *freqs;
+    size_t length;
+} MessageInfo;
 
+/// @brief Generates a Huffman tree from message information
+/// @param message_info Pointer to MessageInfo structure containing character data
+/// @return Root node of the generated Huffman tree
+Node *generate_tree(const MessageInfo *message_info)
+{
+    size_t max_nodes = 2 * message_info->length - 1;
     Node **nodes = malloc(max_nodes * sizeof(Node *));
     memset(nodes, 0, max_nodes * sizeof(Node *));
     size_t current_nb_nodes = 0;
-    for (size_t i = 0; i < MAX_CHAR; i++)
+    for (size_t i = 0; i < message_info->length; i++)
     {
-        if (frequencies[i] > 0)
-        {
-            nodes[current_nb_nodes] = create_node((unsigned char)i, frequencies[i]);
-            if (nodes[current_nb_nodes] == NULL)
-                exit_failed_allocation();
-            current_nb_nodes += 1;
-        }
+        nodes[current_nb_nodes] = create_node(message_info->chars[i], message_info->freqs[i]);
+        if (nodes[current_nb_nodes] == NULL)
+            exit_failed_allocation();
+        current_nb_nodes += 1;
     }
     sort_nodes(nodes, current_nb_nodes);
     while (current_nb_nodes > 1)
@@ -211,25 +225,62 @@ Node *generate_tree(size_t *frequencies, size_t max_nodes)
     return root;
 }
 
-int main(void)
+/// @brief Creates a MessageInfo structure from a given message
+/// @param message Null-terminated string to analyze
+/// @return MessageInfo structure containing unique characters and their frequencies
+MessageInfo create_message(const char *message)
 {
     size_t frequencies[MAX_CHAR] = {0};
-    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
     // Count frequencies
     count_frequencies(message, frequencies);
     print_frequencies(frequencies);
-    // Number of unique characters
+    //
     size_t nb_unique_chars = 0;
     for (size_t i = 0; i < MAX_CHAR; ++i)
     {
         if (frequencies[i] > 0)
             nb_unique_chars += 1;
     }
-    size_t max_nodes = 2 * nb_unique_chars;
-    Node *root = generate_tree(frequencies, max_nodes);
+    MessageInfo message_info = {
+        .chars = malloc(nb_unique_chars * sizeof(unsigned char)),
+        .freqs = malloc(nb_unique_chars * sizeof(size_t)),
+        .length = nb_unique_chars,
+    };
+    if (message_info.chars == NULL || message_info.freqs == NULL)
+        exit_failed_allocation();
+    size_t current_idx = 0;
+    for (size_t i = 0; i < MAX_CHAR; ++i)
+    {
+        if (frequencies[i] > 0)
+        {
+            message_info.chars[current_idx] = (unsigned char)i;
+            message_info.freqs[current_idx] = frequencies[i];
+            current_idx += 1;
+        }
+    }
+    return message_info;
+}
+
+/// @brief Free the characters and frequencies pointer of the message info structure
+/// @param node MessageInfo structure to free
+void free_message_info(MessageInfo *message_info)
+{
+    free(message_info->chars);
+    message_info->chars = NULL;
+    free(message_info->freqs);
+    message_info->freqs = NULL;
+    message_info->length = 0;
+}
+
+int main(void)
+{
+    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
+    MessageInfo message_info = create_message(message);
+    Node *root = generate_tree(&message_info);
     print_node(root);
     printf("\n");
     // free
+    free_message_info(&message_info);
     free_node(root);
     return 0;
 }
