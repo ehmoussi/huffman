@@ -3,6 +3,8 @@
 #include <ctype.h>
 #include <inttypes.h>
 
+#define MAX_CHAR 256
+
 void count_frequencies(const char *message, size_t *frequencies)
 {
     if (message != NULL)
@@ -16,12 +18,9 @@ void count_frequencies(const char *message, size_t *frequencies)
     }
 }
 
-int main(void)
+void print_frequencies(const size_t *frequencies)
 {
-    size_t frequencies[256] = {0};
-    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc\t";
-    count_frequencies(message, frequencies);
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < MAX_CHAR; i++)
     {
         if (frequencies[i] > 0)
         {
@@ -32,5 +31,14 @@ int main(void)
                 printf("Hex: %x : %" PRIuPTR "\n", c, frequencies[i]);
         }
     }
+}
+
+int main(void)
+{
+    size_t frequencies[MAX_CHAR] = {0};
+    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
+    // Count frequencies
+    count_frequencies(message, frequencies);
+    print_frequencies(frequencies);
     return 0;
 }
