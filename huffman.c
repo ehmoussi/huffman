@@ -130,6 +130,56 @@ void print_sorted_frequencies(const size_t *frequencies, size_t *sorted_freq_ind
     printf("\n");
 }
 
+typedef struct Node
+{
+    struct Node *left;
+    struct Node *right;
+    unsigned char c;
+    size_t freq;
+} Node;
+
+Node *create_node(unsigned char c, size_t freq)
+{
+    Node *node = malloc(sizeof(Node));
+    if (node == NULL)
+        return NULL;
+    node->left = NULL;
+    node->right = NULL;
+    node->c = c;
+    node->freq = freq;
+    return node;
+}
+
+Node *create_default_node()
+{
+    return create_node('\0', 0);
+}
+
+void free_node(Node *node)
+{
+    if (node == NULL)
+        return;
+    Node *left = node->left;
+    node->left = NULL;
+    Node *right = node->right;
+    node->right = NULL;
+    free(node);
+    free_node(left);
+    free_node(right);
+}
+
+void print_node(Node *node)
+{
+    printf("%" PRIuPTR "=(", node->freq);
+    if (node->left != NULL)
+        printf("%c: %" PRIuPTR ",", node->left->c, node->left->freq);
+    else
+        printf(",");
+    if (node->right != NULL)
+        printf(" %c: %" PRIuPTR, node->right->c, node->right->freq);
+    printf(")\n");
+}
+
 int main(void)
 {
     size_t frequencies[MAX_CHAR] = {0};
@@ -158,14 +208,23 @@ int main(void)
         exit_error("ERROR: Internal inconsistency - calculated unique character count doesn't match actual count.\n", 2);
     }
     print_sorted_frequencies(frequencies, sorted_freq_indices, nb_unique_chars);
-    // Find the character with the minimum frequency
-    size_t freq_index = sorted_freq_indices[0];
-    size_t min_freq = frequencies[freq_index];
-    unsigned char min_char = (unsigned char)freq_index;
-    if (min_freq > 0)
+    if (nb_unique_chars > 0)
     {
+        // Build a Huffman node
+        Node *node = create_default_node();
+        // right node
+        size_t right_index = sorted_freq_indices[0];
+        node->right = create_node((unsigned char)right_index, frequencies[right_index]);
+        node->freq += frequencies[right_index];
         printf("min: ");
-        print_char_frequency((unsigned char)min_char, min_freq);
+        print_char_frequency(node->right->c, node->right->freq);
+        // left node
+        size_t left_index = sorted_freq_indices[1];
+        node->left = create_node((unsigned char)left_index, frequencies[left_index]);
+        node->freq += frequencies[left_index];
+        print_node(node);
+        // free node
+        free_node(node);
     }
     free(sorted_freq_indices);
     return 0;
