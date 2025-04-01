@@ -33,6 +33,21 @@ void print_frequencies(const size_t *frequencies)
     }
 }
 
+char find_minimum_char(const size_t *frequencies, size_t min_freq)
+{
+    char min_char = (char)-1;
+    size_t current_min = SIZE_MAX;
+    for (size_t i = 0; i < MAX_CHAR; i++)
+    {
+        if (frequencies[i] > min_freq && frequencies[i] < current_min)
+        {
+            current_min = frequencies[i];
+            min_char = (char)i;
+        }
+    }
+    return min_char;
+}
+
 int main(void)
 {
     size_t frequencies[MAX_CHAR] = {0};
@@ -40,5 +55,9 @@ int main(void)
     // Count frequencies
     count_frequencies(message, frequencies);
     print_frequencies(frequencies);
+    // Find the character with the minimum frequency greater than a given frequency
+    char min_char = find_minimum_char(frequencies, 0);
+    printf("min: %c\n", min_char);
+
     return 0;
 }
