@@ -18,7 +18,7 @@ void exit_failed_allocation()
 }
 
 /// @brief Count the frequency of each ASCII character for the given message
-/// @param message
+/// @param message Null-terminated string to analyze for character frequencies
 /// @param frequencies Array of frequencies for MAX_CHAR ASCII characters
 void count_frequencies(const char *message, size_t *frequencies)
 {
@@ -59,77 +59,7 @@ void print_frequencies(const size_t *frequencies)
     }
 }
 
-/// @brief Structure to hold a character's index and its frequency
-/// @param index The ASCII index of the character (0-255)
-/// @param freq The frequency of the character
-typedef struct Freq
-{
-    size_t index;
-    size_t freq;
-} Freq;
-
-/// @brief Comparison function for qsort to sort Freq structures by frequency
-/// @param first Pointer to the first Freq structure to compare
-/// @param second Pointer to the second Freq structure to compare
-/// @return Negative value if first < second, zero if equal, positive if first > second
-int freq_compare(const void *first, const void *second)
-{
-    size_t first_freq = ((Freq *)first)->freq;
-    size_t second_freq = ((Freq *)second)->freq;
-    return (int)((first_freq > second_freq) - (first_freq < second_freq));
-}
-
-/// @brief Sort character indices by their frequency in ascending order
-/// @param frequencies Array of frequencies for MAX_CHAR ASCII characters
-/// @param sorted_freq_indices Output array to store sorted character indices
-/// @param nb_unique_chars Number of unique characters in the message
-/// @return 0 on success, 1 on memory allocation failure, 2 on internal inconsistency
-int sort_asc_frequencies(const size_t *frequencies, size_t *sorted_freq_indices, size_t nb_unique_chars)
-{
-    Freq *freqs = malloc(nb_unique_chars * sizeof(Freq));
-    if (freqs == NULL)
-        return 1;
-    size_t current_index = 0;
-    for (size_t i = 0; i < MAX_CHAR; i++)
-    {
-        if (frequencies[i] > 0)
-        {
-            if (current_index >= nb_unique_chars)
-            {
-                free(freqs);
-                return 2;
-            }
-            freqs[current_index].index = i;
-            freqs[current_index].freq = frequencies[i];
-            current_index += 1;
-        }
-    }
-    qsort(freqs, nb_unique_chars, sizeof(Freq), freq_compare);
-    for (size_t i = 0; i < nb_unique_chars; i++)
-    {
-        sorted_freq_indices[i] = freqs[i].index;
-    }
-    free(freqs);
-    return 0;
-}
-
-/// @brief Print the sorted frequencies of characters
-/// @param frequencies Array of frequencies for MAX_CHAR ASCII characters
-/// @param sorted_freq_indices Array of indices sorted by frequency
-/// @param nb_unique_chars Number of unique characters in the message
-void print_sorted_frequencies(const size_t *frequencies, size_t *sorted_freq_indices, size_t nb_unique_chars)
-{
-    printf("sorted frequencies: ");
-    for (size_t i = 0; i < nb_unique_chars; i++)
-    {
-        if (i > 0)
-            printf(", ");
-        size_t freq = frequencies[sorted_freq_indices[i]];
-        printf("%" PRIuPTR, freq);
-    }
-    printf("\n");
-}
-
+/// @brief Node structure for Huffman tree
 typedef struct Node
 {
     struct Node *left;
@@ -138,6 +68,10 @@ typedef struct Node
     size_t freq;
 } Node;
 
+/// @brief Creates a new node with given character and frequency
+/// @param c Character to store in the node
+/// @param freq Frequency of the character
+/// @return Pointer to the newly created node or NULL if allocation fails
 Node *create_node(unsigned char c, size_t freq)
 {
     Node *node = malloc(sizeof(Node));
@@ -150,11 +84,57 @@ Node *create_node(unsigned char c, size_t freq)
     return node;
 }
 
+/// @brief Creates a new node with default values (null character and zero frequency)
+/// @return Pointer to the newly created node or NULL if allocation fails
 Node *create_default_node()
 {
     return create_node('\0', 0);
 }
 
+/// @brief Creates a parent node from two child nodes
+/// @param left Pointer to the left child node
+/// @param right Pointer to the right child node
+/// @return Pointer to the newly created parent node with frequency equal to sum of children
+///         and the null terminator as the character
+Node *create_parent_node(Node *left, Node *right)
+{
+    Node *parent_node = create_node('\0', left->freq + right->freq);
+    if (parent_node == NULL)
+        return NULL;
+    parent_node->left = left;
+    parent_node->right = right;
+    return parent_node;
+}
+
+/// @brief Comparison function for nodes used in qsort
+/// @param first Pointer to the first node pointer
+/// @param second Pointer to the second node pointer
+/// @return Negative if first frequency < second, positive if first > second, 0 if equal
+int node_compare(const void *first, const void *second)
+{
+    const Node *first_node = *(Node **)first;
+    const Node *second_node = *(Node **)second;
+    if (first_node == NULL && second_node == NULL)
+        return 0;
+    if (second_node == NULL)
+        return -1;
+    if (first_node == NULL)
+        return 1;
+    size_t first_freq = first_node->freq;
+    size_t second_freq = second_node->freq;
+    return (int)((first_freq > second_freq) - (first_freq < second_freq));
+}
+
+/// @brief Sorts an array of node pointers by frequency
+/// @param nodes Array of node pointers to sort
+/// @param nb_nodes Number of nodes in the array
+void sort_nodes(Node **nodes, size_t nb_nodes)
+{
+    qsort(nodes, nb_nodes, sizeof(Node *), node_compare);
+}
+
+/// @brief Recursively frees a node and all its children
+/// @param node Root node to free
 void free_node(Node *node)
 {
     if (node == NULL)
@@ -168,16 +148,67 @@ void free_node(Node *node)
     free_node(right);
 }
 
+/// @brief Recursively prints a node and its children in a tree-like format
+/// @param node Node to print
 void print_node(Node *node)
 {
-    printf("%" PRIuPTR "=(", node->freq);
-    if (node->left != NULL)
-        printf("%c: %" PRIuPTR ",", node->left->c, node->left->freq);
+    if (node == NULL)
+        return;
+    if (node->c == '\0')
+        printf(":%" PRIuPTR, node->freq);
     else
-        printf(",");
-    if (node->right != NULL)
-        printf(" %c: %" PRIuPTR, node->right->c, node->right->freq);
-    printf(")\n");
+        printf("%c:%" PRIuPTR, node->c, node->freq);
+    printf(" {");
+    print_node(node->left);
+    printf(", ");
+    print_node(node->right);
+    printf("}");
+}
+
+/// @brief Generates a Huffman tree from character frequencies
+/// @param frequencies Array of character frequencies
+/// @param max_nodes Maximum number of nodes that can be created
+/// @return Root node of the generated Huffman tree
+Node *generate_tree(size_t *frequencies, size_t max_nodes)
+{
+
+    Node **nodes = malloc(max_nodes * sizeof(Node *));
+    memset(nodes, 0, max_nodes * sizeof(Node *));
+    size_t current_nb_nodes = 0;
+    for (size_t i = 0; i < MAX_CHAR; i++)
+    {
+        if (frequencies[i] > 0)
+        {
+            nodes[current_nb_nodes] = create_node((unsigned char)i, frequencies[i]);
+            if (nodes[current_nb_nodes] == NULL)
+                exit_failed_allocation();
+            current_nb_nodes += 1;
+        }
+    }
+    sort_nodes(nodes, current_nb_nodes);
+    while (current_nb_nodes > 1)
+    {
+        Node *left = nodes[0];
+        Node *right = nodes[1];
+        Node *parent = create_parent_node(left, right);
+        if (parent == NULL)
+        {
+            // free before exiting if the allocation failed
+            for (size_t i = 0; i < current_nb_nodes; i++)
+            {
+                free_node(nodes[i]);
+            }
+            free(nodes);
+            exit_failed_allocation();
+        }
+        nodes[0] = parent;
+        nodes[1] = NULL;
+        sort_nodes(nodes, current_nb_nodes);
+        current_nb_nodes -= 1;
+    }
+    Node *root = nodes[0];
+    free(nodes);
+    return root;
 }
 
 int main(void)
@@ -187,45 +218,18 @@ int main(void)
     // Count frequencies
     count_frequencies(message, frequencies);
     print_frequencies(frequencies);
-    //
+    // Number of unique characters
     size_t nb_unique_chars = 0;
     for (size_t i = 0; i < MAX_CHAR; ++i)
     {
         if (frequencies[i] > 0)
             nb_unique_chars += 1;
     }
-    size_t *sorted_freq_indices = malloc(nb_unique_chars * sizeof(size_t));
-    if (sorted_freq_indices == NULL)
-        exit_failed_allocation();
-    int ret_code = sort_asc_frequencies(frequencies, sorted_freq_indices, nb_unique_chars);
-    if (ret_code == 1)
-    {
-        exit_failed_allocation();
-    }
-    else if (ret_code == 2)
-    {
-        free(sorted_freq_indices);
-        exit_error("ERROR: Internal inconsistency - calculated unique character count doesn't match actual count.\n", 2);
-    }
-    print_sorted_frequencies(frequencies, sorted_freq_indices, nb_unique_chars);
-    if (nb_unique_chars > 0)
-    {
-        // Build a Huffman node
-        Node *node = create_default_node();
-        // right node
-        size_t right_index = sorted_freq_indices[0];
-        node->right = create_node((unsigned char)right_index, frequencies[right_index]);
-        node->freq += frequencies[right_index];
-        printf("min: ");
-        print_char_frequency(node->right->c, node->right->freq);
-        // left node
-        size_t left_index = sorted_freq_indices[1];
-        node->left = create_node((unsigned char)left_index, frequencies[left_index]);
-        node->freq += frequencies[left_index];
-        print_node(node);
-        // free node
-        free_node(node);
-    }
-    free(sorted_freq_indices);
+    size_t max_nodes = 2 * nb_unique_chars;
+    Node *root = generate_tree(frequencies, max_nodes);
+    print_node(root);
+    printf("\n");
+    // free
+    free_node(root);
     return 0;
 }
