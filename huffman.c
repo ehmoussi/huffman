@@ -48,17 +48,17 @@ void print_frequencies(const size_t *frequencies)
     }
 }
 
-/// @brief Find the character with the minimum frequency and a certain threshold
+/// @brief Find the character with the minimum frequency and a certain character threshold
 /// @param frequencies Array of frequencies for MAX_CHAR ASCII characters
-/// @param threshold threshold above which which the search is done
+/// @param threshold threshold ASCII character above which the search is done
 /// @return the minimum ASCII character or -1 if none was found
-int find_minimum_char(const size_t *frequencies, size_t threshold)
+int find_minimum_char(const size_t *frequencies, unsigned char threshold)
 {
     int min_char = -1;
     size_t current_min = SIZE_MAX;
-    for (size_t i = 0; i < MAX_CHAR; i++)
+    for (size_t i = threshold; i < MAX_CHAR; i++)
     {
-        if (frequencies[i] > threshold && frequencies[i] < current_min)
+        if (frequencies[i] > 0 && frequencies[i] < current_min)
         {
             current_min = frequencies[i];
             min_char = (int)i;
@@ -70,12 +70,17 @@ int find_minimum_char(const size_t *frequencies, size_t threshold)
 int main(void)
 {
     size_t frequencies[MAX_CHAR] = {0};
-    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc\t";
+    const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
     // Count frequencies
     count_frequencies(message, frequencies);
     print_frequencies(frequencies);
-    // Find the character with the minimum frequency greater than a given frequency
-    int min_char = find_minimum_char(frequencies, 0);
-    print_char_frequency((unsigned char)min_char, frequencies[(size_t)min_char]);
+    // right node
+    // Find the character with the minimum frequency
+    int min_char = find_minimum_char(frequencies, (unsigned char)0);
+    if (min_char >= 0)
+    {
+        size_t min_freq = frequencies[(size_t)min_char];
+        print_char_frequency((unsigned char)min_char, min_freq);
+    }
     return 0;
 }
