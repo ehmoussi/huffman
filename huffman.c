@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <inttypes.h>
 
-void count_frequencies(const char *message, int *frequencies)
+void count_frequencies(const char *message, size_t *frequencies)
 {
     if (message != NULL)
     {
@@ -17,7 +18,7 @@ void count_frequencies(const char *message, int *frequencies)
 
 int main(void)
 {
-    int frequencies[256] = {0};
+    size_t frequencies[256] = {0};
     const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc\t";
     count_frequencies(message, frequencies);
     for (int i = 0; i < 256; i++)
@@ -26,9 +27,9 @@ int main(void)
         {
             char c = (char)i;
             if (isprint(c))
-                printf("%c : %d\n", c, frequencies[i]);
+                printf("%c : %" PRIuPTR "\n", c, frequencies[i]);
             else
-                printf("Hex: %x : %d\n", c, frequencies[i]);
+                printf("Hex: %x : %" PRIuPTR "\n", c, frequencies[i]);
         }
     }
     return 0;
