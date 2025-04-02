@@ -355,9 +355,51 @@ char *huffman_encode(const char *message, const MessageInfo *message_info)
     return encoded_message;
 }
 
+/// @brief Decodes a Huffman-encoded message back to its original form
+/// @param encoded_message Null-terminated string containing the encoded bits ('0' and '1')
+/// @param root Root node of the Huffman tree used for decoding
+/// @return Dynamically allocated string containing the decoded message or NULL if the decoding failed
+char *huffman_decode(const char *encoded_message, Node *root)
+{
+    size_t capacity = strlen(encoded_message) + 1;
+    char *decoded_message = malloc(capacity * sizeof(char));
+    Node *current_node = root;
+    size_t current_idx = 0;
+    for (size_t i = 0; encoded_message[i] != '\0'; i++)
+    {
+        if (encoded_message[i] == '0')
+            current_node = current_node->left;
+        else
+            current_node = current_node->right;
+        if (current_node->left == NULL && current_node->right == NULL)
+        {
+            if (current_idx >= capacity)
+            {
+                capacity = 2 * capacity;
+                decoded_message = realloc(decoded_message, capacity * sizeof(char));
+            }
+            decoded_message[current_idx] = current_node->c;
+            current_idx += 1;
+            current_node = root;
+        }
+    }
+    if (current_node != root)
+    {
+        // Finished suddenly so the message have not completly decoded
+        free(decoded_message);
+        return NULL;
+    }
+    else
+    {
+        decoded_message[current_idx] = '\0';
+        return decoded_message;
+    }
+}
+
 int main(void)
 {
     const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
+    // "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcec";
     MessageInfo message_info = create_message(message);
     Node *root = generate_tree(&message_info);
     // Huffman coding
@@ -371,18 +413,36 @@ int main(void)
     {
         printf("%c: %s\n", message_info.chars[i].c, message_info.chars[i].code);
     }
-    // free the tree
-    free_node(root);
     // Encode the message
     char *encoded_message = huffman_encode(message, &message_info);
-    // Test
+    printf("encoded message: %s\n", encoded_message);
+    char *decoded_message = huffman_decode(encoded_message, root);
+    if (decoded_message == NULL)
+    {
+        // free messages
+        free(encoded_message);
+        // free the tree
+        free_node(root);
+        // free message info
+        free_message_info(&message_info);
+        exit_error("ERROR: invalid encoded message", 3);
+    }
+    printf("decoded message: %s\n", decoded_message);
+    // Test encode
     char *encoded_message_ref = "001001101011111101011010000001000100101011101101100110110110010100110101010101110100011000100110101111111111111110010011010010111011011001111000111111";
     assert(strlen(encoded_message) == strlen(encoded_message_ref));
     for (size_t i = 0; encoded_message_ref[i] != '\0'; ++i)
         assert(encoded_message[i] == encoded_message_ref[i]);
-    printf("%s\n", encoded_message);
+    // Test decode
+    assert(strlen(decoded_message) == strlen(message));
+    for (size_t i = 0; message[i] != '\0'; ++i)
+        assert(decoded_message[i] == message[i]);
+    // free messages
     free(encoded_message);
-    // free
+    free(decoded_message);
+    // free the tree
+    free_node(root);
+    // free message info
     free_message_info(&message_info);
     return 0;
 }
