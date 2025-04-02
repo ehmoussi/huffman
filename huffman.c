@@ -71,7 +71,7 @@ typedef struct Node
     struct Node *right;
     unsigned char c;
     size_t freq;
-    char *code;
+    unsigned char *code;
 } Node;
 
 /// @brief Creates a new node with given character and frequency
@@ -181,7 +181,7 @@ typedef struct MessageChar
 {
     char c;
     size_t freq;
-    char *code;
+    unsigned char *code;
 } MessageChar;
 
 /// @brief Structure to hold message information for Huffman encoding
@@ -281,44 +281,53 @@ void free_message_info(MessageInfo *message_info)
     free(message_info->chars);
 }
 
-/// @brief Recursively generates Huffman codes for the given tree
+/// @brief Helper function that recursively generates Huffman codes for the given tree
 /// @param message_info Pointer to MessageInfo structure to store character codes
 /// @param node Current node in the Huffman tree
-/// @param code Current code string for the path to this node
-void generate_huffman(MessageInfo *message_info, Node *node, char *code)
+/// @param code_buffer Buffer to store the current code path
+/// @param depth Current depth in the tree, representing code length
+static void _generate_huffman(MessageInfo *message_info, Node *node, unsigned char *code_buffer, size_t depth)
 {
     if (node == NULL)
         return;
-    size_t n = strlen(code);
-    node->code = code;
+    node->code = malloc((depth + 1) * sizeof(unsigned char));
+    memcpy(node->code, code_buffer, depth);
+    node->code[depth] = '\0';
     if (node->left == NULL && node->right == NULL)
     {
         for (size_t i = 0; i < message_info->length; i++)
         {
             if (message_info->chars[i].c == node->c)
             {
-                message_info->chars[i].code = malloc((n + 1) * sizeof(char));
-                strcpy(message_info->chars[i].code, code);
+                message_info->chars[i].code = malloc((depth + 1) * sizeof(unsigned char));
+                memcpy(message_info->chars[i].code, code_buffer, depth);
+                message_info->chars[i].code[depth] = '\0';
                 break;
             }
         }
     }
     if (node->left != NULL)
     {
-        char *left_code = malloc((n + 2) * sizeof(char));
-        strcpy(left_code, code);
-        left_code[n] = '0';
-        left_code[n + 1] = '\0';
-        generate_huffman(message_info, node->left, left_code);
+        code_buffer[depth] = '0';
+        code_buffer[depth + 1] = '\0';
+        _generate_huffman(message_info, node->left, code_buffer, depth + 1);
     }
     if (node->right != NULL)
     {
-        char *right_code = malloc((n + 2) * sizeof(char));
-        strcpy(right_code, code);
-        right_code[n] = '1';
-        right_code[n + 1] = '\0';
-        generate_huffman(message_info, node->right, right_code);
+        code_buffer[depth] = '1';
+        code_buffer[depth + 1] = '\0';
+        _generate_huffman(message_info, node->right, code_buffer, depth + 1);
     }
+}
+
+/// @brief Generates Huffman codes for all nodes in the tree
+/// @param message_info Pointer to MessageInfo structure to store character codes
+/// @param root Root node of the Huffman tree
+void generate_huffman(MessageInfo *message_info, Node *root)
+{
+    unsigned char *code_buffer = malloc((message_info->length + 1) * sizeof(unsigned char));
+    _generate_huffman(message_info, root, code_buffer, 0);
+    free(code_buffer);
 }
 
 /// @brief Encodes a message using Huffman coding based on MessageInfo
@@ -403,9 +412,7 @@ int main(void)
     MessageInfo message_info = create_message(message);
     Node *root = generate_tree(&message_info);
     // Huffman coding
-    char *code = malloc(1 * sizeof(char));
-    code[0] = '\0';
-    generate_huffman(&message_info, root, code);
+    generate_huffman(&message_info, root);
     print_node(root);
     printf("\n");
     // Print the alphabet code
