@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define MAX_CHAR 256
 
@@ -70,6 +71,7 @@ typedef struct Node
     struct Node *right;
     unsigned char c;
     size_t freq;
+    char *code;
 } Node;
 
 /// @brief Creates a new node with given character and frequency
@@ -147,6 +149,8 @@ void free_node(Node *node)
     node->left = NULL;
     Node *right = node->right;
     node->right = NULL;
+    if (node->code != NULL)
+        free(node->code);
     free(node);
     free_node(left);
     free_node(right);
@@ -159,9 +163,9 @@ void print_node(Node *node)
     if (node == NULL)
         return;
     if (node->c == '\0')
-        printf(":%" PRIuPTR, node->freq);
+        printf(":%" PRIuPTR "(%s)", node->freq, node->code);
     else
-        printf("%c:%" PRIuPTR, node->c, node->freq);
+        printf("%c:%" PRIuPTR "(%s)", node->c, node->freq, node->code);
     if (node->left != NULL || node->right != NULL)
     {
         printf(" {");
@@ -177,6 +181,7 @@ typedef struct MessageChar
 {
     char c;
     size_t freq;
+    char *code;
 } MessageChar;
 
 /// @brief Structure to hold message information for Huffman encoding
@@ -257,10 +262,97 @@ MessageInfo create_message(const char *message)
         {
             message_info.chars[current_idx].c = (unsigned char)i;
             message_info.chars[current_idx].freq = frequencies[i];
+            message_info.chars[current_idx].code = NULL;
             current_idx += 1;
         }
     }
     return message_info;
+}
+
+/// @brief Free the message info allocated data
+/// @param message_info Pointer to MessageInfo structure containing character data
+void free_message_info(MessageInfo *message_info)
+{
+    for (size_t i = 0; i < message_info->length; i++)
+    {
+        if (message_info->chars[i].code != NULL)
+            free(message_info->chars[i].code);
+    }
+    free(message_info->chars);
+}
+
+/// @brief Recursively generates Huffman codes for the given tree
+/// @param message_info Pointer to MessageInfo structure to store character codes
+/// @param node Current node in the Huffman tree
+/// @param code Current code string for the path to this node
+void generate_huffman(MessageInfo *message_info, Node *node, char *code)
+{
+    if (node == NULL)
+        return;
+    size_t n = strlen(code);
+    node->code = code;
+    if (node->left == NULL && node->right == NULL)
+    {
+        for (size_t i = 0; i < message_info->length; i++)
+        {
+            if (message_info->chars[i].c == node->c)
+            {
+                message_info->chars[i].code = malloc((n + 1) * sizeof(char));
+                strcpy(message_info->chars[i].code, code);
+                break;
+            }
+        }
+    }
+    if (node->left != NULL)
+    {
+        char *left_code = malloc((n + 2) * sizeof(char));
+        strcpy(left_code, code);
+        left_code[n] = '0';
+        left_code[n + 1] = '\0';
+        generate_huffman(message_info, node->left, left_code);
+    }
+    if (node->right != NULL)
+    {
+        char *right_code = malloc((n + 2) * sizeof(char));
+        strcpy(right_code, code);
+        right_code[n] = '1';
+        right_code[n + 1] = '\0';
+        generate_huffman(message_info, node->right, right_code);
+    }
+}
+
+/// @brief Encodes a message using Huffman coding based on MessageInfo
+/// @param message Null-terminated string to encode
+/// @param message_info Pointer to MessageInfo containing character codes
+/// @return Dynamically allocated string containing the encoded message
+char *huffman_encode(const char *message, const MessageInfo *message_info)
+{
+    size_t capacity = strlen(message) + 1;
+    char *encoded_message = malloc(capacity * sizeof(char));
+    size_t current_idx = 0;
+    for (size_t i = 0; message[i] != '\0'; ++i)
+    {
+        char c = message[i];
+        for (size_t j = 0; j < message_info->length; j++)
+        {
+            if (message_info->chars[j].c == c)
+            {
+                for (size_t k = 0; message_info->chars[j].code[k] != '\0'; ++k)
+                {
+                    if (current_idx >= capacity)
+                    {
+                        capacity = 2 * capacity;
+                        encoded_message = realloc(encoded_message, capacity * sizeof(char));
+                    }
+                    encoded_message[current_idx] = message_info->chars[j].code[k];
+                    current_idx += 1;
+                }
+                break;
+            }
+        }
+    }
+    encoded_message[current_idx] = '\0';
+    return encoded_message;
 }
 
 int main(void)
@@ -268,10 +360,29 @@ int main(void)
     const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
     MessageInfo message_info = create_message(message);
     Node *root = generate_tree(&message_info);
+    // Huffman coding
+    char *code = malloc(1 * sizeof(char));
+    code[0] = '\0';
+    generate_huffman(&message_info, root, code);
     print_node(root);
     printf("\n");
-    // free
-    free(message_info.chars);
+    // Print the alphabet code
+    for (size_t i = 0; i < message_info.length; ++i)
+    {
+        printf("%c: %s\n", message_info.chars[i].c, message_info.chars[i].code);
+    }
+    // free the tree
     free_node(root);
+    // Encode the message
+    char *encoded_message = huffman_encode(message, &message_info);
+    // Test
+    char *encoded_message_ref = "001001101011111101011010000001000100101011101101100110110110010100110101010101110100011000100110101111111111111110010011010010111011011001111000111111";
+    assert(strlen(encoded_message) == strlen(encoded_message_ref));
+    for (size_t i = 0; encoded_message_ref[i] != '\0'; ++i)
+        assert(encoded_message[i] == encoded_message_ref[i]);
+    printf("%s\n", encoded_message);
+    free(encoded_message);
+    // free
+    free_message_info(&message_info);
     return 0;
 }
