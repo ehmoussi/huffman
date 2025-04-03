@@ -7,9 +7,8 @@
 
 #define MAX_CHAR 256
 #define BITS_PER_BYTE 8
-/**
- * @brief Structure representing a bit-level message
- */
+
+/// @brief Structure representing a bit-level message
 typedef struct BitMessage
 {
     unsigned char *data;
@@ -252,12 +251,13 @@ void print_node(const Node *node)
     }
 }
 
-/// @brief Structure to hold character and frequency pair for Huffman encoding
+/// @brief Structure to hold character, frequency pair and Huffman code
 typedef struct MessageChar
 {
     char c;
     size_t freq;
     BitMessage code;
+    BitMessage canonical_code;
 } MessageChar;
 
 /// @brief Structure to hold message information for Huffman encoding
@@ -338,6 +338,9 @@ MessageInfo create_message(size_t *frequencies)
             message_info.chars[current_idx].code.data = NULL;
             message_info.chars[current_idx].code.nbits = 0;
             message_info.chars[current_idx].code.nbytes = 0;
+            message_info.chars[current_idx].canonical_code.data = NULL;
+            message_info.chars[current_idx].canonical_code.nbits = 0;
+            message_info.chars[current_idx].canonical_code.nbytes = 0;
             current_idx += 1;
         }
     }
@@ -353,6 +356,8 @@ void free_message_info(MessageInfo *message_info)
     {
         if (message_info->chars[i].code.data != NULL)
             free(message_info->chars[i].code.data);
+        if (message_info->chars[i].canonical_code.data != NULL)
+            free(message_info->chars[i].canonical_code.data);
     }
     free(message_info->chars);
 }
@@ -495,9 +500,62 @@ char *huffman_decode(const BitMessage *encoded_message, Node *root)
     }
 }
 
+/// @brief Compares two MessageChar structures for sorting by code length and character value
+/// @param first Pointer to the first MessageChar to compare
+/// @param second Pointer to the second MessageChar to compare
+/// @return -1 if first comes before second, 1 if second comes before first, 0 if equal.
+///         Sort by the number of bits and then in lexicographic order using the ASCII character
+int code_comparator(const void *first, const void *second)
+{
+    MessageChar *mess_char_first = (MessageChar *)first;
+    MessageChar *mess_char_second = (MessageChar *)second;
+    if (mess_char_first->code.nbits > mess_char_second->code.nbits)
+        return 1;
+    else if (mess_char_first->code.nbits < mess_char_second->code.nbits)
+        return -1;
+    else if (mess_char_first->c > mess_char_second->c)
+        return 1;
+    else if (mess_char_first->c < mess_char_second->c)
+        return -1;
+    else
+        return 0;
+}
+
+/// @brief Builds canonical Huffman codes for all characters in the message
+/// @param message_info Pointer to MessageInfo structure containing character codes
+void build_canonical_code(MessageInfo *message_info)
+{
+    // Sort the alphabet code
+    qsort(message_info->chars, message_info->length, sizeof(MessageChar), code_comparator);
+    // Build canonical code
+    unsigned int current_code = 0;
+    size_t prev_nbits = message_info->chars[0].code.nbits;
+    for (size_t i = 0; i < message_info->length; ++i)
+    {
+        size_t nbits = message_info->chars[i].code.nbits;
+        size_t nbytes = message_info->chars[i].code.nbytes;
+        message_info->chars[i].canonical_code.data = calloc(nbytes, sizeof(unsigned char));
+        message_info->chars[i].canonical_code.nbits = nbits;
+        message_info->chars[i].canonical_code.nbytes = nbytes;
+        if (nbits > prev_nbits)
+        {
+            current_code <<= (nbits - prev_nbits);
+            prev_nbits = nbits;
+        }
+        for (size_t j = 0; j < nbits; j++)
+        {
+            int bit_value = (current_code >> (nbits - 1 - j)) & 1;
+            if (bit_value)
+                message_info->chars[i].canonical_code.data[j / BITS_PER_BYTE] |= (1 << ((BITS_PER_BYTE - 1) - (j % BITS_PER_BYTE)));
+        }
+        current_code++;
+    }
+}
+
 int main(void)
 {
     const char *message = "aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc";
+    // const char *message = "AAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBCCCCCCCCCCCCCDDDDDDDDDDDD";
     // Count frequencies
     size_t frequencies[MAX_CHAR] = {0};
     count_frequencies(message, frequencies);
@@ -510,12 +568,16 @@ int main(void)
     generate_huffman(&message_info, root);
     print_node(root);
     printf("\n");
+    // Build the canonical code
+    build_canonical_code(&message_info);
     // Print the alphabet code
     char data[8] = {0};
+    char canonical_data[8] = {0};
     for (size_t i = 0; i < message_info.length; ++i)
     {
         display_bit_message(&message_info.chars[i].code, data);
-        printf("%c: %s\n", message_info.chars[i].c, data);
+        display_bit_message(&message_info.chars[i].canonical_code, canonical_data);
+        printf("%c: %s -> %s\n", message_info.chars[i].c, data, canonical_data);
     }
     // Encode the message
     BitMessage encoded_message = {.data = NULL, .nbits = 0, .nbytes = 0};
