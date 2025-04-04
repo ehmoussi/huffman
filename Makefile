@@ -6,7 +6,7 @@ MODE ?= release
 ifeq ($(MODE),debug)
 	CFLAGS = -DDEBUG_MODE -g -fstack-protector-all -fsanitize=address -fsanitize=undefined $(DEF_CFLAGS)
 else
-	CFLAGS = -DNDEBUG $(DEF_CFLAGS)
+	CFLAGS =  $(DEF_CFLAGS)
 endif
 
 all: clean test_huffman
