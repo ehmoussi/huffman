@@ -22,7 +22,7 @@
     {                                                                      \
         char dbg_bit_msg[128];                                             \
         display_bit_message(&(node_ptr)->data->code, dbg_bit_msg);         \
-        if (node->data->c != '\0')                                         \
+        if ((node_ptr)->data->c != '\0')                                   \
             printf("DEBUG: %c -> %s\n", (node_ptr)->data->c, dbg_bit_msg); \
         else                                                               \
             printf("DEBUG: %s\n", dbg_bit_msg);                            \
