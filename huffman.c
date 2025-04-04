@@ -16,6 +16,19 @@ typedef struct BitMessage
     size_t nbytes;
 } BitMessage;
 
+/// @brief Frees all resources associated with a BitMessage
+/// @param bit_message Pointer to the BitMessage structure to free
+void free_bit_message(BitMessage *bit_message)
+{
+    if (bit_message->data != NULL)
+    {
+        free(bit_message->data);
+    }
+    bit_message->data = NULL;
+    bit_message->nbits = 0;
+    bit_message->nbytes = 0;
+}
+
 /// @brief Gets the value of a bit at a specific position in a BitMessage
 /// @param bit_message Pointer to the BitMessage structure
 /// @param pos Position of the bit to retrieve (zero-indexed)
@@ -285,6 +298,7 @@ Node *generate_tree(const MessageInfo *message_info)
             exit_failed_allocation();
         current_nb_nodes += 1;
     }
+    // TODO: Replace by a min heap queue
     sort_nodes(nodes, current_nb_nodes);
     while (current_nb_nodes > 1)
     {
@@ -311,8 +325,8 @@ Node *generate_tree(const MessageInfo *message_info)
     return root;
 }
 
-/// @brief Creates a MessageInfo structure from the frequencies of a message
-/// @param frequencies Array of the frequencies for each 256 ASCII characters
+/// @brief Creates a MessageInfo structure from frequencies of characters in a message
+/// @param frequencies Array of frequencies for each ASCII character (size MAX_CHAR)
 /// @return MessageInfo structure containing unique characters and their frequencies
 MessageInfo create_message(size_t *frequencies)
 {
@@ -411,35 +425,80 @@ void generate_huffman(MessageInfo *message_info, Node *root)
     free(code_buffer.data);
 }
 
+/// @brief Encodes a message header containing code lengths and symbol information
+/// @param message_info Pointer to MessageInfo structure with canonical codes
+/// @param header Pointer to BitMessage structure to store the header information
+void huffman_encode_header(const MessageInfo *message_info, BitMessage *header)
+{
+    // The maximum number of bits is the last one because message_info has been sorted when
+    // building the canonical code
+    unsigned int max_nbits = message_info->chars[message_info->length - 1].canonical_code.nbits;
+    size_t nmemb = (max_nbits + 1 + message_info->length);
+    header->nbytes = nmemb;
+    header->nbits = nmemb * sizeof(unsigned char);
+    header->data = calloc(nmemb, sizeof(unsigned char));
+    header->data[0] = max_nbits;
+    size_t current_idx = 1;
+    for (size_t i = 0; i < message_info->length; ++i)
+    {
+        MessageChar *message_char = &message_info->chars[i];
+        if (message_char->canonical_code.nbits > current_idx)
+            current_idx += 1;                                                       // next item of the header to count the number of characters with current_idx bits
+        header->data[current_idx] = ((unsigned char)header->data[current_idx]) + 1; // Increment the count
+        header->data[max_nbits + 1 + i] = message_char->c;                          // Add the character
+    }
+}
+
+/// @brief Structure to hold a Huffman-encoded message with its header
+typedef struct EncodedMessage
+{
+    BitMessage header;
+    BitMessage message;
+} EncodedMessage;
+
+/// @brief Frees all resources associated with an EncodedMessage
+/// @param encoded_message Pointer to the EncodedMessage structure to free
+void free_encoded_message(EncodedMessage *encoded_message)
+{
+    free_bit_message(&encoded_message->header);
+    free_bit_message(&encoded_message->message);
+}
+
 /// @brief Encodes a message using Huffman coding based on MessageInfo
 /// @param message Null-terminated string to encode
 /// @param message_info Pointer to MessageInfo containing character codes
 /// @param encoded_message Pointer to BitMessage structure to store the encoded result
-void huffman_encode(const char *message, const MessageInfo *message_info, BitMessage *encoded_message)
+void huffman_encode(const char *message, const MessageInfo *message_info, EncodedMessage *encoded_message)
 {
+    // Add the header
+    huffman_encode_header(message_info, &encoded_message->header);
+    // Add the message
     size_t capacity = 0;
+    // Count the size of the encoded message
     for (size_t i = 0; message[i] != '\0'; ++i)
     {
         for (size_t j = 0; j < message_info->length; ++j)
         {
             if (message_info->chars[j].c == message[i])
-                capacity += message_info->chars[j].code.nbits;
+                capacity += message_info->chars[j].canonical_code.nbits;
         }
     }
-    encoded_message->data = malloc((capacity / BITS_PER_BYTE + 1) * sizeof(unsigned char));
-    encoded_message->nbits = 0;
-    encoded_message->nbytes = 0;
+    encoded_message->message.data = malloc((capacity / BITS_PER_BYTE + 1) * sizeof(unsigned char));
+    encoded_message->message.nbits = 0;
+    encoded_message->message.nbytes = 0;
+    // Add the message
     for (size_t i = 0; message[i] != '\0'; ++i)
     {
         char c = message[i];
         for (size_t j = 0; j < message_info->length; j++)
         {
-            if (message_info->chars[j].c == c)
+            MessageChar *message_char = &message_info->chars[j];
+            if (message_char->c == c)
             {
-                for (size_t k = 0; k < message_info->chars[j].code.nbits; ++k)
+                for (size_t k = 0; k < message_char->canonical_code.nbits; ++k)
                 {
-                    int value = get_bit_message_value(&message_info->chars[j].code, k);
-                    add_one_bit_message_value(encoded_message, value);
+                    int value = get_bit_message_value(&message_char->canonical_code, k);
+                    add_one_bit_message_value(&encoded_message->message, value);
                 }
                 break;
             }
@@ -451,53 +510,49 @@ void huffman_encode(const char *message, const MessageInfo *message_info, BitMes
 /// @param encoded_message Null-terminated string containing the encoded bits ('0' and '1')
 /// @param root Root node of the Huffman tree used for decoding
 /// @return Dynamically allocated string containing the decoded message or NULL if the decoding failed
-char *huffman_decode(const BitMessage *encoded_message, Node *root)
+char *huffman_decode(const BitMessage *encoded_message, const MessageInfo *message_info)
 {
     // Compute the capacity
-    size_t capacity = 0;
-    Node *current_node = root;
-    for (size_t i = 0; i < encoded_message->nbits; i++)
-    {
-        int value = get_bit_message_value(encoded_message, i);
-        if (value)
-            current_node = current_node->right;
-        else
-            current_node = current_node->left;
-        if (current_node->left == NULL && current_node->right == NULL)
-        {
-            capacity += 1;
-            current_node = root;
-        }
-    }
-    capacity += 1; // null terminator
+    size_t capacity = encoded_message->nbytes;
     char *decoded_message = malloc(capacity * sizeof(char));
-    current_node = root;
+    size_t start = 0;
     size_t current_idx = 0;
-    for (size_t i = 0; i < encoded_message->nbits; i++)
+    int found_char = 0;
+    for (; start < encoded_message->nbits;)
     {
-        int value = get_bit_message_value(encoded_message, i);
-        if (value)
-            current_node = current_node->right;
-        else
-            current_node = current_node->left;
-        if (current_node->left == NULL && current_node->right == NULL)
+        // TODO: Replace by a look up table
+        for (size_t j = 0; j < message_info->length; ++j)
         {
-            decoded_message[current_idx] = current_node->c;
-            current_idx += 1;
-            current_node = root;
+            MessageChar *message_char = &message_info->chars[j];
+            // Search for the character
+            size_t k = 0;
+            while (
+                k < message_char->code.nbits &&
+                (get_bit_message_value(encoded_message, start + k) ==
+                 get_bit_message_value(&message_char->code, k)))
+                k++;
+            // If all the bits are equal then we have found the character
+            found_char = (k == message_char->code.nbits);
+            if (found_char)
+            {
+                decoded_message[current_idx] = message_char->c;
+                start += message_char->code.nbits;
+                current_idx += 1;
+                break;
+            }
+        }
+        if (!found_char)
+            exit_error("ERROR: The header of the encoded message is corrupt. Can't decode a character.", 4);
+        // If the current index is greater than the current capacity
+        // Then we reallocate the decoded message
+        if (current_idx >= capacity)
+        {
+            capacity = 2 * capacity;
+            decoded_message = realloc(decoded_message, capacity);
         }
     }
-    if (current_node != root)
-    {
-        // Finished suddenly so the message have not completly decoded
-        free(decoded_message);
-        return NULL;
-    }
-    else
-    {
-        decoded_message[current_idx] = '\0';
-        return decoded_message;
-    }
+    decoded_message[current_idx] = '\0';
+    return decoded_message;
 }
 
 /// @brief Compares two MessageChar structures for sorting by code length and character value
@@ -521,8 +576,8 @@ int code_comparator(const void *first, const void *second)
         return 0;
 }
 
-/// @brief Builds canonical Huffman codes for all characters in the message
-/// @param message_info Pointer to MessageInfo structure containing character codes
+/// @brief Sorts the message characters and builds canonical Huffman codes
+/// @param message_info Pointer to MessageInfo structure to update with canonical codes
 void build_canonical_code(MessageInfo *message_info)
 {
     // Sort the alphabet code
@@ -549,6 +604,59 @@ void build_canonical_code(MessageInfo *message_info)
                 message_info->chars[i].canonical_code.data[j / BITS_PER_BYTE] |= (1 << ((BITS_PER_BYTE - 1) - (j % BITS_PER_BYTE)));
         }
         current_code++;
+    }
+}
+
+/// @brief Extracts message information from an encoded message header
+/// @param encoded_message Pointer to EncodedMessage containing the header
+/// @param message_info Pointer to MessageInfo structure to populate
+void create_message_info_from_header(const EncodedMessage *encoded_message, MessageInfo *message_info)
+{
+    // Find the total number of unique characters
+    unsigned int length = 0;
+    const BitMessage *header = &encoded_message->header;
+    if (header->nbytes > 0)
+    {
+        size_t max_nbits = (size_t)header->data[0];
+        if (header->nbytes > (max_nbits + 1))
+        {
+            for (unsigned int i = 0; i < max_nbits; ++i)
+                length += (unsigned int)header->data[i + 1];
+            // fill the message info
+            message_info->chars = malloc(length * sizeof(MessageChar));
+            message_info->length = (size_t)length;
+            size_t current_idx = 0;
+            size_t current_header_idx = (size_t)max_nbits + 1;
+            unsigned int current_code = 0;
+            for (size_t i = 1; i < (max_nbits + 1); ++i)
+            {
+                size_t nchars = (size_t)header->data[i];
+                size_t nbits = (size_t)i;
+                size_t nbytes = nbits / BITS_PER_BYTE + 1;
+                for (unsigned int j = 0; j < nchars; ++j)
+                {
+                    MessageChar *message_char = &message_info->chars[current_idx];
+                    message_char->c = header->data[current_header_idx];
+                    message_char->code.data = calloc(nbytes, sizeof(unsigned char));
+                    message_char->code.nbits = nbits;
+                    message_char->code.nbytes = nbytes;
+                    message_char->canonical_code.data = NULL;
+                    message_char->canonical_code.nbits = 0;
+                    message_char->canonical_code.nbytes = 0;
+                    message_char->freq = 0;
+                    for (size_t k = 0; k < nbits; k++)
+                    {
+                        int bit_value = (current_code >> (nbits - 1 - k)) & 1;
+                        if (bit_value)
+                            message_char->code.data[k / BITS_PER_BYTE] |= (1 << ((BITS_PER_BYTE - 1) - (k % BITS_PER_BYTE)));
+                    }
+                    current_idx += 1;
+                    current_header_idx += 1;
+                    current_code += 1;
+                }
+                current_code <<= (i - 1);
+            }
+        }
     }
 }
 
@@ -580,16 +688,29 @@ int main(void)
         printf("%c: %s -> %s\n", message_info.chars[i].c, data, canonical_data);
     }
     // Encode the message
-    BitMessage encoded_message = {.data = NULL, .nbits = 0, .nbytes = 0};
+    EncodedMessage encoded_message = {
+        .header = {.data = NULL, .nbits = 0, .nbytes = 0},
+        .message = {.data = NULL, .nbits = 0, .nbytes = 0}};
     huffman_encode(message, &message_info, &encoded_message);
-    char encoded_message_data[256] = {0};
-    display_bit_message(&encoded_message, encoded_message_data);
+    char encoded_message_data[512] = {0};
+    printf(
+        "%" PRIuPTR " bytes used instead of %" PRIuPTR "\n",
+        (encoded_message.header.nbytes + encoded_message.message.nbytes), strlen(message));
+    display_bit_message(&encoded_message.message, encoded_message_data);
     printf("encoded message: %s\n", encoded_message_data);
-    char *decoded_message = huffman_decode(&encoded_message, root);
+    MessageInfo decoded_message_info = {.chars = NULL, .length = 0};
+    create_message_info_from_header(&encoded_message, &decoded_message_info);
+    // Print the alphabet code decoded from the header
+    for (size_t i = 0; i < decoded_message_info.length; ++i)
+    {
+        display_bit_message(&decoded_message_info.chars[i].code, data);
+        printf("%c: %s\n", decoded_message_info.chars[i].c, data);
+    }
+    char *decoded_message = huffman_decode(&encoded_message.message, &decoded_message_info);
     if (decoded_message == NULL)
     {
         // free messages
-        free(encoded_message.data);
+        free_encoded_message(&encoded_message);
         // free the tree
         free_node(root);
         // free message info
@@ -600,18 +721,20 @@ int main(void)
     // Test encode
     char *encoded_message_ref = "001001101011111101011010000001000100101011101101100110110110010100110101010101110100011000100110101111111111111110010011010010111011011001111000111111";
     assert(strlen(encoded_message_data) == strlen(encoded_message_ref));
-    for (size_t i = 0; encoded_message_ref[i] != '\0'; ++i)
-        assert(encoded_message_data[i] == encoded_message_ref[i]);
+    // TODO: Remove because the canonical code is different from the code
+    // for (size_t i = 0; encoded_message_ref[i] != '\0'; ++i)
+    //     assert(encoded_message_data[i] == encoded_message_ref[i]);
     // Test decode
     assert(strlen(decoded_message) == strlen(message));
     for (size_t i = 0; message[i] != '\0'; ++i)
         assert(decoded_message[i] == message[i]);
     // free messages
-    free(encoded_message.data);
+    free_encoded_message(&encoded_message);
     free(decoded_message);
     // free the tree
     free_node(root);
     // free message info
     free_message_info(&message_info);
+    free_message_info(&decoded_message_info);
     return 0;
 }
