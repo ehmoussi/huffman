@@ -104,7 +104,7 @@ void free_char_code(CharCode *char_code)
 
 ///@brief Frees all dynamically allocated memory in a AlphabetCode structure
 ///@param alphabet Pointer to AlphabetCode structure to free
-void free_alphabet_code(AlphabetCode *alphabet)
+void free_alphabet_code(const AlphabetCode *alphabet)
 {
     for (size_t i = 0; i < alphabet->length; i++)
         free_char_code(&alphabet->chars[i]);
@@ -457,7 +457,11 @@ void generate_huffman_code(const AlphabetCode *alphabet)
     HuffmanNode *root = generate_huffman_tree(alphabet);
     PRINT_DEBUG("Generate the huffman tree");
     if (root == NULL)
+    {
+        free_alphabet_code(alphabet);
+        free_huffman_node(root);
         exit_error("Generation of the Huffman tree has failed", _STATUS_CODE_TREE_FAIL);
+    }
     // Create a code buffer that will traverse the tree and define the code for each node
     BitMessage code_buffer = {
         .data = malloc((alphabet->length + 1) * sizeof(unsigned char)),
@@ -632,7 +636,12 @@ char *huffman_decode_message(const BitMessage *encoded_message, const AlphabetCo
             }
         }
         if (!found_char)
-            exit_error("The header of the encoded message is corrupt. Can't decode a character.", _STATUS_CODE_HEADER_CORRUPT);
+        {
+            free(decoded_message);
+            exit_error(
+                "The header of the encoded message is corrupt. Can't decode a character.",
+                _STATUS_CODE_HEADER_CORRUPT);
+        }
         // If the current index is greater than the current capacity
         // Then we reallocate the decoded message
         if (current_idx >= capacity)
@@ -665,7 +674,10 @@ void huffman_encode(const char *message, EncodedMessage *encoded_message)
     PRINT_DEBUG("encode the alphabet");
     // Exit if the encoding of the alphabet has failed
     if (encoded_message->header.data == NULL)
+    {
+        free_alphabet_code(&alphabet);
         exit_error("Failed to encode the alphabet code of the message.", _STATUS_CODE_HEADER_FAIL);
+    }
     // Encode the message
     huffman_encode_message(message, &alphabet, &encoded_message->message);
     PRINT_DEBUG("encode the message");
