@@ -63,12 +63,15 @@ typedef struct AlphabetCode
     size_t length;
 } AlphabetCode;
 
+/// @brief Node in a Huffman tree containing data and child pointers
 typedef struct HuffmanNode
 {
     CharCode *data;
     struct HuffmanNode *left;
     struct HuffmanNode *right;
 } HuffmanNode;
+
+/// @brief Priority queue for Huffman nodes used during tree construction
 typedef struct HuffmanQueue
 {
     HuffmanNode **queue;
@@ -108,12 +111,16 @@ void free_alphabet_code(AlphabetCode *alphabet)
     free(alphabet->chars);
 }
 
+/// @brief Frees resources associated with an encoded message
+/// @param encoded_message Pointer to the EncodedMessage structure to free
 void free_encoded_message(EncodedMessage *encoded_message)
 {
     free_bit_message(&encoded_message->header);
     free_bit_message(&encoded_message->message);
 }
 
+/// @brief Frees resources associated with a Huffman tree node and its children
+/// @param node Pointer to the HuffmanNode structure to free
 void free_huffman_node(HuffmanNode *node)
 {
     if (node == NULL)
@@ -135,6 +142,8 @@ void free_huffman_node(HuffmanNode *node)
     free_huffman_node(right);
 }
 
+/// @brief Frees resources associated with a Huffman priority queue
+/// @param queue Pointer to the HuffmanQueue structure to free
 void free_huffman_queue(HuffmanQueue *queue)
 {
     free(queue->queue);
@@ -196,6 +205,9 @@ void remove_one_bit_message_value(BitMessage *bit_message)
     bit_message->nbytes = bit_message->nbits / CHAR_BIT + 1;
 }
 
+/// @brief Converts a BitMessage to a readable string representation
+/// @param bit_message Pointer to the BitMessage structure to display
+/// @param data Character array to store the string representation
 void display_bit_message(const BitMessage *bit_message, char *data)
 {
     for (size_t i = 0; i < bit_message->nbits; ++i)
@@ -225,6 +237,10 @@ void count_frequencies(const char *message, size_t *frequencies)
     }
 }
 
+/// @brief Function used to compare CharCode entries for sorting by frequency
+/// @param a Pointer to the first CharCode to compare
+/// @param b Pointer to the second CharCode to compare
+/// @return Negative if a's frequency is less than b's, positive if greater, zero if equal
 int alphabet_freq_comparator(const void *a, const void *b)
 {
     CharCode *char_code_a = (CharCode *)a;
@@ -232,6 +248,9 @@ int alphabet_freq_comparator(const void *a, const void *b)
     return (int)(char_code_a->freq < char_code_b->freq) - (char_code_a->freq > char_code_b->freq);
 }
 
+/// @brief Builds an alphabet structure containing characters and their frequencies
+/// @param message Null-terminated string to analyze
+/// @param alphabet Pointer to AlphabetCode structure to initialize
 void build_alphabet(const char *message, AlphabetCode *alphabet)
 {
     size_t frequencies[MAX_CHAR] = {0};
@@ -263,6 +282,9 @@ void build_alphabet(const char *message, AlphabetCode *alphabet)
     qsort(alphabet->chars, alphabet->length, sizeof(CharCode), alphabet_freq_comparator);
 }
 
+/// @brief Creates a new Huffman tree node for a character
+/// @param char_code Pointer to CharCode structure for the character
+/// @return Pointer to the newly created HuffmanNode
 HuffmanNode *create_huffman_node(CharCode *char_code)
 {
     HuffmanNode *node = malloc(sizeof(HuffmanNode));
@@ -272,6 +294,10 @@ HuffmanNode *create_huffman_node(CharCode *char_code)
     return node;
 }
 
+/// @brief Creates a parent Huffman node with two child nodes
+/// @param left Pointer to the left child node
+/// @param right Pointer to the right child node
+/// @return Pointer to the newly created parent node
 HuffmanNode *create_parent_huffman_node(HuffmanNode *left, HuffmanNode *right)
 {
     HuffmanNode *node = malloc(sizeof(HuffmanNode));
@@ -286,6 +312,9 @@ HuffmanNode *create_parent_huffman_node(HuffmanNode *left, HuffmanNode *right)
     return node;
 }
 
+/// @brief Adds a node to a Huffman priority queue
+/// @param queue Pointer to the HuffmanQueue to add to
+/// @param node Pointer to the HuffmanNode to add
 void append_huffman_queue(HuffmanQueue *queue, HuffmanNode *node)
 {
     size_t index = 0;
@@ -305,6 +334,9 @@ void append_huffman_queue(HuffmanQueue *queue, HuffmanNode *node)
     queue->count += 1;
 }
 
+/// @brief Removes and returns the node with the lowest frequency from the queue
+/// @param queue Pointer to the HuffmanQueue to pop from
+/// @return Pointer to the HuffmanNode with minimum frequency
 HuffmanNode *pop_min_freq_huffman_queue(HuffmanQueue *queue)
 {
     HuffmanNode *node = NULL;
@@ -326,6 +358,9 @@ HuffmanNode *pop_min_freq_huffman_queue(HuffmanQueue *queue)
     return node;
 }
 
+/// @brief Creates a HuffmanQueue and initializes it with nodes from the alphabet
+/// @param alphabet Pointer to the AlphabetCode structure containing character information
+/// @return Root node of the generated Huffman tree
 HuffmanNode *generate_huffman_tree(const AlphabetCode *alphabet)
 {
     HuffmanQueue queue = {
@@ -383,6 +418,9 @@ static void _generate_huffman_code(HuffmanNode *node, BitMessage *code_buffer)
     }
 }
 
+/// @brief Transforms standard Huffman codes to canonical form
+///         (see https://en.wikipedia.org/wiki/Canonical_Huffman_code)
+/// @param alphabet Pointer to the AlphabetCode structure
 void transform_to_canonical_code(const AlphabetCode *alphabet)
 {
     if (alphabet->length == 0)
@@ -410,6 +448,8 @@ void transform_to_canonical_code(const AlphabetCode *alphabet)
     }
 }
 
+/// @brief Generates Huffman codes for all characters in the alphabet
+/// @param alphabet Pointer to the AlphabetCode structure
 void generate_huffman_code(const AlphabetCode *alphabet)
 {
     PRINT_DEBUG("Start generating huffman code");
@@ -433,6 +473,9 @@ void generate_huffman_code(const AlphabetCode *alphabet)
     transform_to_canonical_code(alphabet);
 }
 
+/// @brief Encodes the alphabet information as a header for the compressed data
+/// @param alphabet Pointer to the AlphabetCode structure
+/// @param header Pointer to BitMessage structure to store the encoded header
 void huffman_encode_alphabet(const AlphabetCode *alphabet, BitMessage *header)
 {
     // The maximum number of bits is the last one because the alphabet is sorted
@@ -460,6 +503,10 @@ void huffman_encode_alphabet(const AlphabetCode *alphabet, BitMessage *header)
     }
 }
 
+/// @brief Encodes a message using Huffman coding based on the provided alphabet
+/// @param message Null-terminated string to encode
+/// @param alphabet Pointer to the AlphabetCode structure with character codes
+/// @param encoded_message Pointer to BitMessage structure to store the encoded message
 void huffman_encode_message(const char *message, AlphabetCode *alphabet, BitMessage *encoded_message)
 {
     if (alphabet->length == 0)
@@ -498,6 +545,9 @@ void huffman_encode_message(const char *message, AlphabetCode *alphabet, BitMess
     }
 }
 
+/// @brief Recreates the alphabet from an encoded message header
+/// @param encoded_message Pointer to EncodedMessage containing the header
+/// @param alphabet Pointer to AlphabetCode structure to store the decoded alphabet
 void huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode *alphabet)
 {
     unsigned int length = 0;
@@ -546,6 +596,10 @@ void huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode
     }
 }
 
+/// @brief Decodes a Huffman-encoded message using the provided alphabet
+/// @param encoded_message Pointer to BitMessage containing the encoded data
+/// @param alphabet Pointer to AlphabetCode structure with character codes
+/// @return Dynamically allocated string containing the decoded message
 char *huffman_decode_message(const BitMessage *encoded_message, const AlphabetCode *alphabet)
 {
     // Compute the capacity
@@ -591,6 +645,9 @@ char *huffman_decode_message(const BitMessage *encoded_message, const AlphabetCo
     return decoded_message;
 }
 
+/// @brief Encodes a message using Huffman coding
+/// @param message Null-terminated string to encode
+/// @param encoded_message Pointer to EncodedMessage structure to store the result
 void huffman_encode(const char *message, EncodedMessage *encoded_message)
 {
     PRINT_DEBUG("START Encoding");
@@ -615,6 +672,9 @@ void huffman_encode(const char *message, EncodedMessage *encoded_message)
     free_alphabet_code(&alphabet);
 }
 
+/// @brief Decodes a Huffman-encoded message
+/// @param encoded_message Pointer to EncodedMessage structure containing encoded data
+/// @return Dynamically allocated string containing the decoded message
 char *huffman_decode(const EncodedMessage *encoded_message)
 {
     char *decoded_message;
