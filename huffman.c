@@ -4,7 +4,49 @@
 #include <limits.h>
 #include <assert.h>
 
-#define _DEBUG_MODE 1
+#if DEBUG_MODE
+#define PRINT_DEBUG(msg)              \
+    do                                \
+    {                                 \
+        printf("DEBUG: %s\n", (msg)); \
+    } while (0)
+#else
+#define PRINT_DEBUG(msg) \
+    do                   \
+    {                    \
+    } while (0)
+#endif
+#if DEBUG_MODE
+#define PRINT_DEBUG_HUFFMAN_NODE(node_ptr)                                 \
+    do                                                                     \
+    {                                                                      \
+        char dbg_bit_msg[128];                                             \
+        display_bit_message(&(node_ptr)->data->code, dbg_bit_msg);         \
+        if (node->data->c != '\0')                                         \
+            printf("DEBUG: %c -> %s\n", (node_ptr)->data->c, dbg_bit_msg); \
+        else                                                               \
+            printf("DEBUG: %s\n", dbg_bit_msg);                            \
+    } while (0)
+#else
+#define PRINT_DEBUG_HUFFMAN_NODE(node_ptr) \
+    do                                     \
+    {                                      \
+    } while (0)
+#endif
+#if DEBUG_MODE
+#define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr)                      \
+    do                                                                \
+    {                                                                 \
+        char dbg_bit_msg[128];                                        \
+        display_bit_message(&(char_code_ptr)->code, dbg_bit_msg);     \
+        printf("DEBUG: %c -> %s\n", (char_code_ptr)->c, dbg_bit_msg); \
+    } while (0)
+#else
+#define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr) \
+    do                                           \
+    {                                            \
+    } while (0)
+#endif
 
 /// @brief Structure to hold character, frequency and Huffman code
 typedef struct CharCode
@@ -109,40 +151,6 @@ void exit_error(char *message, int status)
     exit(status);
 }
 
-void print_debug(const char *debug_msg)
-{
-    if (_DEBUG_MODE)
-        printf("DEBUG: %s\n", debug_msg);
-}
-
-void print_debug_huffman_node(const HuffmanNode *node)
-{
-    if (_DEBUG_MODE)
-    {
-        char dbg_msg[256];
-        char dbg_bit_msg[128];
-        display_bit_message(&node->data->code, dbg_bit_msg);
-        if (node->data->c != '\0')
-            sprintf(dbg_msg, "%c -> %s", node->data->c, dbg_bit_msg);
-        else
-            sprintf(dbg_msg, "%s", dbg_bit_msg);
-        print_debug(dbg_msg);
-    }
-}
-
-void print_debug_alphabet_code(const CharCode *char_code)
-{
-    if (_DEBUG_MODE)
-    {
-
-        char dbg_msg[256];
-        char dbg_bit_msg[128];
-        display_bit_message(&char_code->code, dbg_bit_msg);
-        sprintf(dbg_msg, "%c -> %s", char_code->c, dbg_bit_msg);
-        print_debug(dbg_msg);
-    }
-}
-
 /// @brief Gets the value of a bit at a specific position in a BitMessage
 /// @param bit_message Pointer to the BitMessage structure
 /// @param pos Position of the bit to retrieve (zero-indexed)
@@ -173,8 +181,7 @@ void add_one_bit_message_value(BitMessage *bit_message, int value)
 /// @param src Pointer to the source BitMessage structure to copy
 void copy_bit_message(BitMessage *dest, const BitMessage *src)
 {
-    if (_DEBUG_MODE)
-        assert(dest->data == NULL);
+    assert(dest->data == NULL);
     dest->data = malloc(src->nbytes * sizeof(unsigned char));
     memcpy(dest->data, src->data, src->nbytes);
     dest->nbits = src->nbits;
@@ -332,7 +339,7 @@ HuffmanNode *generate_huffman_tree(const AlphabetCode *alphabet)
         HuffmanNode *node = create_huffman_node(&alphabet->chars[i]);
         append_huffman_queue(&queue, node);
     }
-    print_debug("Add the alphabet in the queue");
+    PRINT_DEBUG("Add the alphabet in the queue");
     while (queue.count > 1)
     {
         HuffmanNode *left_node = pop_min_freq_huffman_queue(&queue);
@@ -357,7 +364,7 @@ static void _generate_huffman_code(HuffmanNode *node, BitMessage *code_buffer)
     else if (node->left == NULL && node->right == NULL)
     {
         copy_bit_message(&node->data->code, code_buffer);
-        print_debug_huffman_node(node);
+        PRINT_DEBUG_HUFFMAN_NODE(node);
     }
     else
     {
@@ -398,17 +405,17 @@ void transform_to_canonical_code(const AlphabetCode *alphabet)
             if (bit_value)
                 alphabet->chars[i].code.data[j / CHAR_BIT] |= (1 << ((CHAR_BIT - 1) - (j % CHAR_BIT)));
         }
-        print_debug_alphabet_code(&alphabet->chars[i]);
+        PRINT_DEBUG_ALPHABET_CODE(&alphabet->chars[i]);
         current_code++;
     }
 }
 
 void generate_huffman_code(const AlphabetCode *alphabet)
 {
-    print_debug("Start generating huffman code");
+    PRINT_DEBUG("Start generating huffman code");
     // Create the huffman tree
     HuffmanNode *root = generate_huffman_tree(alphabet);
-    print_debug("Generate the huffman tree");
+    PRINT_DEBUG("Generate the huffman tree");
     if (root == NULL)
         exit_error("Generation of the Huffman tree has failed", _STATUS_CODE_TREE_FAIL);
     // Create a code buffer that will traverse the tree and define the code for each node
@@ -586,25 +593,25 @@ char *huffman_decode_message(const BitMessage *encoded_message, const AlphabetCo
 
 void huffman_encode(const char *message, EncodedMessage *encoded_message)
 {
-    print_debug("START Encoding");
+    PRINT_DEBUG("START Encoding");
     if (strlen(message) == 0)
         return;
     // Build the alphabet of the message
     AlphabetCode alphabet = {.chars = NULL, .length = 0};
     build_alphabet(message, &alphabet);
-    print_debug("build the alphabet");
+    PRINT_DEBUG("build the alphabet");
     // Generate the huffman code for each character of the alphabet
     generate_huffman_code(&alphabet);
-    print_debug("generate the huffman code for the alphabet");
+    PRINT_DEBUG("generate the huffman code for the alphabet");
     // Encode the alphabet
     huffman_encode_alphabet(&alphabet, &encoded_message->header);
-    print_debug("encode the alphabet");
+    PRINT_DEBUG("encode the alphabet");
     // Exit if the encoding of the alphabet has failed
     if (encoded_message->header.data == NULL)
         exit_error("Failed to encode the alphabet code of the message.", _STATUS_CODE_HEADER_FAIL);
     // Encode the message
     huffman_encode_message(message, &alphabet, &encoded_message->message);
-    print_debug("encode the message");
+    PRINT_DEBUG("encode the message");
     free_alphabet_code(&alphabet);
 }
 
