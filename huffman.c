@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <assert.h>
+#include <stdint.h>
 
 #if DEBUG_MODE
 #define PRINT_DEBUG(msg)              \
@@ -20,7 +21,7 @@
 #define PRINT_DEBUG_HUFFMAN_NODE(node_ptr)                                 \
     do                                                                     \
     {                                                                      \
-        char dbg_bit_msg[128];                                             \
+        char dbg_bit_msg[4096];                                            \
         display_bit_message(&(node_ptr)->data->code, dbg_bit_msg);         \
         if ((node_ptr)->data->c != '\0')                                   \
             printf("DEBUG: %c -> %s\n", (node_ptr)->data->c, dbg_bit_msg); \
@@ -34,12 +35,12 @@
     } while (0)
 #endif
 #if DEBUG_MODE
-#define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr)                      \
-    do                                                                \
-    {                                                                 \
-        char dbg_bit_msg[128];                                        \
-        display_bit_message(&(char_code_ptr)->code, dbg_bit_msg);     \
-        printf("DEBUG: %c -> %s\n", (char_code_ptr)->c, dbg_bit_msg); \
+#define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr)                                                                                                \
+    do                                                                                                                                          \
+    {                                                                                                                                           \
+        char dbg_bit_msg[4096];                                                                                                                 \
+        display_bit_message(&(char_code_ptr)->code, dbg_bit_msg);                                                                               \
+        printf("DEBUG: %c (freq=%ld, nbits=%ld) -> %s\n", (char_code_ptr)->c, (char_code_ptr)->freq, (char_code_ptr)->code.nbits, dbg_bit_msg); \
     } while (0)
 #else
 #define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr) \
@@ -466,6 +467,25 @@ static void _generate_huffman_code(HuffmanNode *node, BitMessage *code_buffer)
     }
 }
 
+/// @brief Function used to compare CharCode entries for sorting by nbits then by lexicographical order of the characters
+/// @param a Pointer to the first CharCode to compare
+/// @param b Pointer to the second CharCode to compare
+/// @return Positive if a's nbits is greater than b's, negative if less, zero if equal
+int alphabet_nbits_comparator(const void *a, const void *b)
+{
+    CharCode *char_code_a = (CharCode *)a;
+    CharCode *char_code_b = (CharCode *)b;
+    if (char_code_a->code.nbits > char_code_b->code.nbits)
+        return 1;
+    else if (char_code_a->code.nbits < char_code_b->code.nbits)
+        return -1;
+    else if (char_code_a->c > char_code_b->c)
+        return 1;
+    else if (char_code_a->c < char_code_b->c)
+        return -1;
+    return 0;
+}
+
 /// @brief Transforms standard Huffman codes to canonical form
 ///         (see https://en.wikipedia.org/wiki/Canonical_Huffman_code)
 /// @param alphabet Pointer to the AlphabetCode structure
@@ -473,7 +493,7 @@ void transform_to_canonical_code(const AlphabetCode *alphabet)
 {
     if (alphabet->length == 0)
         return;
-    unsigned int current_code = 0;
+    uint64_t current_code = 0;
     size_t prev_nbits = alphabet->chars[0].code.nbits;
     for (size_t i = 0; i < alphabet->length; ++i)
     {
@@ -521,7 +541,10 @@ void generate_huffman_code(const AlphabetCode *alphabet)
     // Free the tree and the buffer
     free_huffman_node(root);
     free_bit_message(&code_buffer);
+    // Sort by number of bits of the code
+    qsort(alphabet->chars, alphabet->length, sizeof(CharCode), alphabet_nbits_comparator);
     // Transform the huffman to a canonical huffman code
+    PRINT_DEBUG("Transform the code to canonical code");
     transform_to_canonical_code(alphabet);
 }
 
@@ -536,7 +559,7 @@ void huffman_encode_alphabet(const AlphabetCode *alphabet, BitMessage *header)
     // [[max_nbits][N_0...N_max_nbits][a_0...a_nb_chars]]
     size_t header_size = (max_nbits + 1 + alphabet->length);
     header->nbytes = header_size;
-    header->nbits = header_size * sizeof(unsigned char);
+    header->nbits = header_size * sizeof(unsigned char) * CHAR_BIT;
     header->data = calloc(header_size, sizeof(unsigned char));
     // Store the maximum number of bits to indicate how many bytes to read after the first one
     header->data[0] = max_nbits;
@@ -546,7 +569,7 @@ void huffman_encode_alphabet(const AlphabetCode *alphabet, BitMessage *header)
     {
         CharCode *char_code = &alphabet->chars[i];
         // next item of the header to count the number of characters with current_idx bits
-        if (char_code->code.nbits > current_idx)
+        while (char_code->code.nbits > current_idx)
             current_idx += 1;
         // Increment the number of characters with the current number of bits
         header->data[current_idx] = ((unsigned char)header->data[current_idx]) + 1;
@@ -618,7 +641,7 @@ void huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode
             alphabet->length = (size_t)length;
             size_t current_idx = 0;
             size_t current_header_idx = (size_t)max_nbits + 1;
-            unsigned int current_code = 0;
+            uint64_t current_code = 0;
             for (size_t i = 1; i < (max_nbits + 1); ++i)
             {
                 size_t nchars = (size_t)header->data[i];
@@ -639,10 +662,11 @@ void huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode
                             char_code->code.data[k / CHAR_BIT] |= (1 << ((CHAR_BIT - 1) - (k % CHAR_BIT)));
                     }
                     current_idx += 1;
+                    PRINT_DEBUG_ALPHABET_CODE(char_code);
                     current_header_idx += 1;
                     current_code += 1;
                 }
-                current_code <<= (i - 1);
+                current_code <<= 1;
             }
         }
     }
@@ -738,8 +762,6 @@ void huffman_encode(const char *message, EncodedMessage *encoded_message)
 char *huffman_decode(const EncodedMessage *encoded_message)
 {
     char *decoded_message;
-    if (encoded_message->header.data == NULL)
-        return "";
     AlphabetCode alphabet = {.chars = NULL, .length = 0};
     huffman_decode_alphabet(encoded_message, &alphabet);
     decoded_message = huffman_decode_message(&encoded_message->message, &alphabet);
