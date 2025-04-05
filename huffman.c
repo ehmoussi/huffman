@@ -237,7 +237,7 @@ void count_frequencies(const char *message, size_t *frequencies)
     }
 }
 
-/// @brief Function used to compare CharCode entries for sorting by frequency
+/// @brief Function used to compare CharCode entries for sorting by frequency then by lexicographical order of the characters
 /// @param a Pointer to the first CharCode to compare
 /// @param b Pointer to the second CharCode to compare
 /// @return Negative if a's frequency is less than b's, positive if greater, zero if equal
@@ -245,7 +245,15 @@ int alphabet_freq_comparator(const void *a, const void *b)
 {
     CharCode *char_code_a = (CharCode *)a;
     CharCode *char_code_b = (CharCode *)b;
-    return (int)(char_code_a->freq < char_code_b->freq) - (char_code_a->freq > char_code_b->freq);
+    if (char_code_a->freq < char_code_b->freq)
+        return 1;
+    else if (char_code_a->freq > char_code_b->freq)
+        return -1;
+    else if (char_code_a->c < char_code_b->c)
+        return 1;
+    else if (char_code_a->c > char_code_b->c)
+        return -1;
+    return 0;
 }
 
 /// @brief Builds an alphabet structure containing characters and their frequencies
@@ -334,7 +342,7 @@ void append_huffman_queue(HuffmanQueue *queue, HuffmanNode *node)
     queue->count += 1;
 }
 
-/// @brief Removes and returns the node with the lowest frequency from the queue
+/// @brief Removes and returns the node with the lowest frequency (and the lowest character) from the queue
 /// @param queue Pointer to the HuffmanQueue to pop from
 /// @return Pointer to the HuffmanNode with minimum frequency
 HuffmanNode *pop_min_freq_huffman_queue(HuffmanQueue *queue)
@@ -344,7 +352,12 @@ HuffmanNode *pop_min_freq_huffman_queue(HuffmanQueue *queue)
     for (int i = 0; i < (int)queue->capacity; ++i)
     {
         HuffmanNode *current_node = queue->queue[i];
-        if (current_node != NULL && (index == -1 || current_node->data->freq < node->data->freq))
+        if (current_node == NULL)
+            continue;
+        if (index == -1 ||                                    // initialize the node with the first non NULL node
+            (current_node->data->freq < node->data->freq ||   // node is current node if the frequency is strictly smaller
+             (current_node->data->freq == node->data->freq && // node is current node if the frequency is equal but the character is 'smaller'
+              current_node->data->c < node->data->c)))
         {
             index = i;
             node = current_node;
