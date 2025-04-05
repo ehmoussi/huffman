@@ -13,8 +13,9 @@ void test_huffman(const char *message)
     display_bit_message(&encoded_message.header, data);
     printf("HEADER: %s\n", data);
     display_bit_message(&encoded_message.message, data);
-    printf("MESSAGE: %s\n", data);
+    printf("ENCODED MESSAGE: %s\n", data);
     char *decoded_message = huffman_decode(&encoded_message);
+    printf("DECODED MESSAGE: %s\n", decoded_message);
     assert(strlen(decoded_message) == strlen(message));
     for (size_t i = 0; message[i] != '\0'; ++i)
         assert(decoded_message[i] == message[i]);

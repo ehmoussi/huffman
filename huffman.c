@@ -156,7 +156,7 @@ void free_huffman_queue(HuffmanQueue *queue)
 /// @param status Exit status code
 void exit_error(char *message, int status)
 {
-    fprintf(stderr, "ERROR: %s", message);
+    fprintf(stderr, "ERROR: %s\n", message);
     exit(status);
 }
 
@@ -240,7 +240,7 @@ void count_frequencies(const char *message, size_t *frequencies)
 /// @brief Function used to compare CharCode entries for sorting by frequency then by lexicographical order of the characters
 /// @param a Pointer to the first CharCode to compare
 /// @param b Pointer to the second CharCode to compare
-/// @return Negative if a's frequency is less than b's, positive if greater, zero if equal
+/// @return Positive if a's frequency is less than b's, negative if greater, zero if equal
 int alphabet_freq_comparator(const void *a, const void *b)
 {
     CharCode *char_code_a = (CharCode *)a;
@@ -325,21 +325,35 @@ HuffmanNode *create_parent_huffman_node(HuffmanNode *left, HuffmanNode *right)
 /// @param node Pointer to the HuffmanNode to add
 void append_huffman_queue(HuffmanQueue *queue, HuffmanNode *node)
 {
-    size_t index = 0;
-    while (index < queue->capacity)
-    {
-        if (queue->queue[index] == NULL)
-            break;
-        index += 1;
-    }
-    if (index >= queue->capacity)
+    queue->count += 1;
+    if ((queue->count) >= queue->capacity)
     {
         size_t capacity = 2 * queue->capacity;
         queue->queue = realloc(queue->queue, capacity * sizeof(HuffmanNode *));
         memset(queue->queue + queue->capacity, 0, queue->capacity * sizeof(HuffmanNode *));
     }
-    queue->queue[index] = node;
-    queue->count += 1;
+    // Add at the end of the queue
+    size_t current_index = queue->count - 1;
+    queue->queue[current_index] = node;
+    while (current_index > 0)
+    {
+        size_t parent_index = (current_index - 1) / 2;
+        assert(parent_index < queue->count);
+        HuffmanNode *parent_node = queue->queue[parent_index];
+        if (parent_node->data->freq > node->data->freq ||
+            (parent_node->data->c != '\0' &&
+             node->data->c != '\0' &&
+             parent_node->data->freq == node->data->freq &&
+             parent_node->data->c > node->data->c))
+        {
+            // swap the nodes
+            queue->queue[parent_index] = node;
+            queue->queue[current_index] = parent_node;
+            current_index = parent_index;
+        }
+        else
+            break;
+    }
 }
 
 /// @brief Removes and returns the node with the lowest frequency (and the lowest character) from the queue
@@ -347,28 +361,49 @@ void append_huffman_queue(HuffmanQueue *queue, HuffmanNode *node)
 /// @return Pointer to the HuffmanNode with minimum frequency
 HuffmanNode *pop_min_freq_huffman_queue(HuffmanQueue *queue)
 {
-    HuffmanNode *node = NULL;
-    int index = -1;
-    for (int i = 0; i < (int)queue->capacity; ++i)
+    HuffmanNode *min_node = queue->queue[0];
+    // Replace the root with the last element
+    queue->queue[0] = queue->queue[queue->count - 1];
+    queue->count -= 1;
+    // Keep heap property
+    size_t current_index = 0;
+    while (current_index < queue->count)
     {
-        HuffmanNode *current_node = queue->queue[i];
-        if (current_node == NULL)
-            continue;
-        if (index == -1 ||                                    // initialize the node with the first non NULL node
-            (current_node->data->freq < node->data->freq ||   // node is current node if the frequency is strictly smaller
-             (current_node->data->freq == node->data->freq && // node is current node if the frequency is equal but the character is 'smaller'
-              current_node->data->c < node->data->c)))
+        HuffmanNode *current_node = queue->queue[current_index];
+        size_t left_index = 2 * current_index + 1;
+        size_t right_index = 2 * current_index + 2;
+        HuffmanNode *left_node = NULL;
+        if (left_index < queue->count)
+            left_node = queue->queue[left_index];
+        HuffmanNode *right_node = NULL;
+        if (right_index < queue->count)
+            right_node = queue->queue[right_index];
+        if (left_node != NULL &&
+            (right_node == NULL ||
+             (right_node != NULL && alphabet_freq_comparator(left_node->data, right_node->data) == 1)) &&
+            alphabet_freq_comparator(left_node->data, current_node->data) == 1)
         {
-            index = i;
-            node = current_node;
+            // swap the nodes
+            queue->queue[left_index] = current_node;
+            queue->queue[current_index] = left_node;
+            current_index = left_index;
+        }
+        else if (right_node != NULL &&
+                 (left_node == NULL ||
+                  (left_node != NULL && alphabet_freq_comparator(right_node->data, left_node->data) == 1)) &&
+                 alphabet_freq_comparator(right_node->data, current_node->data) == 1)
+        {
+            // swap the nodes
+            queue->queue[right_index] = current_node;
+            queue->queue[current_index] = right_node;
+            current_index = right_index;
+        }
+        else
+        {
+            break;
         }
     }
-    if (index >= 0)
-    {
-        queue->count -= 1;
-        queue->queue[index] = NULL;
-    }
-    return node;
+    return min_node;
 }
 
 /// @brief Creates a HuffmanQueue and initializes it with nodes from the alphabet
