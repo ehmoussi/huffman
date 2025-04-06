@@ -1,12 +1,12 @@
 CC = gcc
-DEF_CFLAGS = -Wall -Wextra -Werror -pedantic -std=c99 -O2
+DEF_CFLAGS = -Wall -Wextra -Werror -pedantic -std=c99
 
 MODE ?= release
 
 ifeq ($(MODE),debug)
 	CFLAGS = -DDEBUG_MODE -g -fstack-protector-all -fsanitize=address -fsanitize=undefined $(DEF_CFLAGS)
 else
-	CFLAGS =  $(DEF_CFLAGS)
+	CFLAGS =  $(DEF_CFLAGS) -O2
 endif
 
 all: clean test_huffman
