@@ -527,6 +527,8 @@ static int _generate_huffman_code(HuffmanNode *node, BitMessage *code_buffer)
         return 0;
     else if (node->left == NULL && node->right == NULL)
     {
+        if (code_buffer->nbits == 0)
+            add_one_bit_message_value(code_buffer, 0);
         int status = copy_bit_message(&node->data->code, code_buffer);
         if (status > 0)
             return status;

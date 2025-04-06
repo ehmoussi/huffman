@@ -70,6 +70,12 @@ int main(void)
     test_huffman("aabbccddbbeaebdddfffdbffddabbbbbcdefaabbcccccaabbddfffdcecc");
     // Test empty
     test_huffman("");
+    // Test two same characters
+    test_huffman("a");
+    // Test one character
+    test_huffman("aa");
+    // Test two different characters
+    test_huffman("ab");
     // Test random
     char message[500];
     generate_message(message, 500, 10);
