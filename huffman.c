@@ -596,26 +596,24 @@ void huffman_encode_message(const char *message, AlphabetCode *alphabet, BitMess
                 capacity += alphabet->chars[j].code.nbits;
         }
     }
+    // Create a lookup table
+    CharCode *lookup_alphabet[MAX_CHAR] = {0};
+    for (size_t i = 0; i < alphabet->length; ++i)
+        lookup_alphabet[(unsigned int)alphabet->chars[i].c] = &alphabet->chars[i];
+    // Encode the message
     encoded_message->data = malloc((capacity / CHAR_BIT + 1) * sizeof(unsigned char));
     encoded_message->nbits = 0;
     encoded_message->nbytes = 0;
     for (size_t i = 0; message[i] != '\0'; ++i)
     {
         char c = message[i];
-        // Iterate in reverse to have the greater frequency first since the alphabet is sorted
-        // in ascending order according to the frequency
-        for (int j = alphabet->length - 1; j >= 0; j--)
+        CharCode *char_code = lookup_alphabet[(unsigned int)c];
+        assert(char_code != NULL);
+        assert(char_code->c == c);
+        for (size_t k = 0; k < char_code->code.nbits; ++k)
         {
-            CharCode *char_code = &alphabet->chars[j];
-            if (char_code->c == c)
-            {
-                for (size_t k = 0; k < char_code->code.nbits; ++k)
-                {
-                    int value = get_bit_message_value(&char_code->code, k);
-                    add_one_bit_message_value(encoded_message, value);
-                }
-                break;
-            }
+            int value = get_bit_message_value(&char_code->code, k);
+            add_one_bit_message_value(encoded_message, value);
         }
     }
 }
