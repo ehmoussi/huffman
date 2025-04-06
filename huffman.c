@@ -69,6 +69,7 @@ typedef struct AlphabetCodeTree
 {
     CharCode **tree;
     size_t length;
+    size_t min_nbits;
 } AlphabetCodeTree;
 
 /// @brief Node in a Huffman tree containing data and child pointers
@@ -785,9 +786,14 @@ int create_alphabet_code_tree(const AlphabetCode *alphabet, AlphabetCodeTree *al
     if (alphabet_code_tree->tree != NULL)
         return STATUS_CODE_ALPHABET_CODE_TREE_NOT_EMPTY;
     // Compute the number of nodes of the binary tree
+    size_t min_nbits = 0;
     size_t max_nbits = 0;
     if (alphabet->length > 0)
+    {
+        min_nbits = alphabet->chars[0].code.nbits;
         max_nbits = alphabet->chars[alphabet->length - 1].code.nbits;
+    }
+    alphabet_code_tree->min_nbits = min_nbits;
     alphabet_code_tree->length = 1;
     for (size_t i = 0; i < (max_nbits + 1); ++i)
         alphabet_code_tree->length *= 2;
@@ -818,7 +824,9 @@ int huffman_decode_message(const BitMessage *encoded_message, const AlphabetCode
     if (*decoded_message != NULL)
         return STATUS_CODE_DECODED_MESSAGE_NOT_EMPTY;
     // Compute the capacity
-    size_t capacity = encoded_message->nbytes;
+    size_t capacity = 0;
+    if (alphabet_code_tree->min_nbits > 0)
+        capacity = encoded_message->nbits / alphabet_code_tree->min_nbits;
     *decoded_message = malloc(capacity * sizeof(char));
     if (*decoded_message == NULL)
         return STATUS_CODE_ALLOC_FAIL;
