@@ -64,6 +64,13 @@ typedef struct AlphabetCode
     size_t length;
 } AlphabetCode;
 
+/// @brief Structure to organize the alphabet as a binary tree according the bits of the codes
+typedef struct AlphabetCodeTree
+{
+    CharCode **tree;
+    size_t length;
+} AlphabetCodeTree;
+
 /// @brief Node in a Huffman tree containing data and child pointers
 typedef struct HuffmanNode
 {
@@ -110,6 +117,14 @@ void free_alphabet_code(const AlphabetCode *alphabet)
     for (size_t i = 0; i < alphabet->length; i++)
         free_char_code(&alphabet->chars[i]);
     free(alphabet->chars);
+}
+
+///@brief Free the AlphabetCode binary tree structure
+///@param alphabet_code_tree Pointer to AlphabetCode structure to free
+void free_alphabet_code_tree(AlphabetCodeTree *alphabet_code_tree)
+{
+    free(alphabet_code_tree->tree);
+    alphabet_code_tree->length = 0;
 }
 
 /// @brief Frees resources associated with an encoded message
@@ -670,43 +685,64 @@ void huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode
     }
 }
 
+/// @brief Create a binary tree using the code bits of the alphabet
+/// @param alphabet Pointer to AlphabetCode structure to store the decoded alphabet
+/// @param alphabet_code_tree Pointer to AlphabetCodeTree structure
+void create_alphabet_code_tree(const AlphabetCode *alphabet, AlphabetCodeTree *alphabet_code_tree)
+{
+    // Compute the number of nodes of the binary tree
+    size_t max_nbits = 0;
+    if (alphabet->length > 0)
+        max_nbits = alphabet->chars[alphabet->length - 1].code.nbits;
+    alphabet_code_tree->length = 1;
+    for (size_t i = 0; i < (max_nbits + 1); ++i)
+        alphabet_code_tree->length *= 2;
+    alphabet_code_tree->length -= 1;
+    // Fill the binary tree
+    alphabet_code_tree->tree = calloc(alphabet_code_tree->length, sizeof(CharCode *));
+    for (size_t i = 0; i < alphabet->length; ++i)
+    {
+        CharCode *char_code = &alphabet->chars[i];
+        size_t pos = 0;
+        for (size_t j = 0; j < char_code->code.nbits; ++j)
+            pos = 2 * pos + 1 + (size_t)get_bit_message_value(&char_code->code, j);
+        assert(pos < alphabet_code_tree->length);
+        alphabet_code_tree->tree[pos] = char_code;
+    }
+}
+
 /// @brief Decodes a Huffman-encoded message using the provided alphabet
 /// @param encoded_message Pointer to BitMessage containing the encoded data
 /// @param alphabet Pointer to AlphabetCode structure with character codes
 /// @return Dynamically allocated string containing the decoded message
-char *huffman_decode_message(const BitMessage *encoded_message, const AlphabetCode *alphabet)
+char *huffman_decode_message(const BitMessage *encoded_message, AlphabetCodeTree *alphabet_code_tree)
 {
+    // Create the tree of the alphabet
     // Compute the capacity
     size_t capacity = encoded_message->nbytes;
     char *decoded_message = malloc(capacity * sizeof(char));
     size_t start = 0;
     size_t current_idx = 0;
-    int found_char = 0;
-    for (; start < encoded_message->nbits;)
+    while (start < encoded_message->nbits)
     {
-        // TODO: Replace by a look up table
-        for (size_t j = 0; j < alphabet->length; ++j)
+        // Search for the character
+        size_t k = 0;
+        size_t pos = 0;
+        while (alphabet_code_tree->tree[pos] == NULL && pos < alphabet_code_tree->length)
         {
-            CharCode *char_code = &alphabet->chars[j];
-            // Search for the character
-            size_t k = 0;
-            while (
-                k < char_code->code.nbits &&
-                (get_bit_message_value(encoded_message, start + k) ==
-                 get_bit_message_value(&char_code->code, k)))
-                k++;
-            // If all the bits are equal then we have found the character
-            found_char = (k == char_code->code.nbits);
-            if (found_char)
-            {
-                decoded_message[current_idx] = char_code->c;
-                start += char_code->code.nbits;
-                current_idx += 1;
-                break;
-            }
+            pos = 2 * pos + 1 + get_bit_message_value(encoded_message, start + k);
+            k += 1;
         }
-        if (!found_char)
+        CharCode *char_code = alphabet_code_tree->tree[pos];
+        if (char_code != NULL)
         {
+            decoded_message[current_idx] = char_code->c;
+            start += char_code->code.nbits;
+            current_idx += 1;
+        }
+        else
+        {
+            free(alphabet_code_tree);
             free(decoded_message);
             exit_error(
                 "The header of the encoded message is corrupt. Can't decode a character.",
@@ -760,9 +796,15 @@ void huffman_encode(const char *message, EncodedMessage *encoded_message)
 char *huffman_decode(const EncodedMessage *encoded_message)
 {
     char *decoded_message;
+    // Decode the alphabet from the header of the encoded message
     AlphabetCode alphabet = {.chars = NULL, .length = 0};
     huffman_decode_alphabet(encoded_message, &alphabet);
-    decoded_message = huffman_decode_message(&encoded_message->message, &alphabet);
+    // Create a tree from the alphabet
+    AlphabetCodeTree alphabet_code_tree = {.tree = NULL, .length = 0};
+    create_alphabet_code_tree(&alphabet, &alphabet_code_tree);
+    // Decode the message using the HuffmanTree
+    decoded_message = huffman_decode_message(&encoded_message->message, &alphabet_code_tree);
     free_alphabet_code(&alphabet);
+    free_alphabet_code_tree(&alphabet_code_tree);
     return decoded_message;
 }
