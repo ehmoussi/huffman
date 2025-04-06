@@ -18,15 +18,16 @@
     } while (0)
 #endif
 #if DEBUG_MODE
-#define PRINT_DEBUG_HUFFMAN_NODE(node_ptr)                                 \
-    do                                                                     \
-    {                                                                      \
-        char dbg_bit_msg[4096];                                            \
-        display_bit_message(&(node_ptr)->data->code, dbg_bit_msg);         \
-        if ((node_ptr)->data->c != '\0')                                   \
-            printf("DEBUG: %c -> %s\n", (node_ptr)->data->c, dbg_bit_msg); \
-        else                                                               \
-            printf("DEBUG: %s\n", dbg_bit_msg);                            \
+#define PRINT_DEBUG_HUFFMAN_NODE(node_ptr)                                             \
+    do                                                                                 \
+    {                                                                                  \
+        char *dbg_bit_msg = malloc(((node_ptr)->data->code.nbits + 1) * sizeof(char)); \
+        display_bit_message(&(node_ptr)->data->code, dbg_bit_msg);                     \
+        if ((node_ptr)->data->c != '\0')                                               \
+            printf("DEBUG: %c -> %s\n", (node_ptr)->data->c, dbg_bit_msg);             \
+        else                                                                           \
+            printf("DEBUG: %s\n", dbg_bit_msg);                                        \
+        free(dbg_bit_msg);                                                             \
     } while (0)
 #else
 #define PRINT_DEBUG_HUFFMAN_NODE(node_ptr) \
@@ -38,9 +39,10 @@
 #define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr)                                                                                                \
     do                                                                                                                                          \
     {                                                                                                                                           \
-        char dbg_bit_msg[4096];                                                                                                                 \
+        char *dbg_bit_msg = malloc(((char_code_ptr)->code.nbits + 1) * sizeof(char));                                                           \
         display_bit_message(&(char_code_ptr)->code, dbg_bit_msg);                                                                               \
         printf("DEBUG: %c (freq=%ld, nbits=%ld) -> %s\n", (char_code_ptr)->c, (char_code_ptr)->freq, (char_code_ptr)->code.nbits, dbg_bit_msg); \
+        free(dbg_bit_msg);                                                                                                                      \
     } while (0)
 #else
 #define PRINT_DEBUG_ALPHABET_CODE(char_code_ptr) \
@@ -261,7 +263,7 @@ void count_frequencies(const char *message, size_t *frequencies)
     if (message != NULL)
     {
         // Set the array to zero
-        memset(frequencies, 0, MAX_CHAR * sizeof(char));
+        // memset(frequencies, 0, MAX_CHAR * sizeof(size_t));
         for (size_t i = 0; message[i] != '\0'; ++i)
         {
             unsigned char index = (unsigned char)message[i];
