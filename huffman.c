@@ -733,50 +733,53 @@ int huffman_decode_alphabet(const EncodedMessage *encoded_message, AlphabetCode 
         return STATUS_CODE_ALPHABET_NOT_EMPTY;
     unsigned int length = 0;
     const BitMessage *header = &encoded_message->header;
-    if (header->nbytes > 0)
+    if (header->nbytes == 0)
     {
-        // Retrieve the maximum number of bits
-        size_t max_nbits = (size_t)header->data[0];
-        if (header->nbytes > (max_nbits + 1))
+        if (encoded_message->message.nbytes == 0)
+            return 0;
+        else
+            return STATUS_CODE_HEADER_CORRUPT;
+    }
+    // Retrieve the maximum number of bits
+    size_t max_nbits = (size_t)header->data[0];
+    if (header->nbytes <= (max_nbits + 1))
+        return STATUS_CODE_HEADER_CORRUPT;
+    // Find the total number of unique characters
+    for (unsigned int i = 0; i < max_nbits; ++i)
+        length += (unsigned int)header->data[i + 1];
+    // fill the message info
+    alphabet->chars = malloc(length * sizeof(CharCode));
+    if (alphabet->chars == NULL)
+        return STATUS_CODE_ALLOC_FAIL;
+    alphabet->length = (size_t)length;
+    size_t current_idx = 0;
+    size_t current_header_idx = (size_t)max_nbits + 1;
+    uint64_t current_code = 0;
+    for (size_t i = 1; i < (max_nbits + 1); ++i)
+    {
+        size_t nchars = (size_t)header->data[i];
+        size_t nbits = (size_t)i;
+        size_t nbytes = nbits / CHAR_BIT + 1;
+        for (unsigned int j = 0; j < nchars; ++j)
         {
-            // Find the total number of unique characters
-            for (unsigned int i = 0; i < max_nbits; ++i)
-                length += (unsigned int)header->data[i + 1];
-            // fill the message info
-            alphabet->chars = malloc(length * sizeof(CharCode));
-            if (alphabet->chars == NULL)
-                return STATUS_CODE_ALLOC_FAIL;
-            alphabet->length = (size_t)length;
-            size_t current_idx = 0;
-            size_t current_header_idx = (size_t)max_nbits + 1;
-            uint64_t current_code = 0;
-            for (size_t i = 1; i < (max_nbits + 1); ++i)
+            CharCode *char_code = &alphabet->chars[current_idx];
+            char_code->c = header->data[current_header_idx];
+            char_code->code.data = calloc(nbytes, sizeof(unsigned char));
+            char_code->code.nbits = nbits;
+            char_code->code.nbytes = nbytes;
+            char_code->freq = 0;
+            for (size_t k = 0; k < nbits; k++)
             {
-                size_t nchars = (size_t)header->data[i];
-                size_t nbits = (size_t)i;
-                size_t nbytes = nbits / CHAR_BIT + 1;
-                for (unsigned int j = 0; j < nchars; ++j)
-                {
-                    CharCode *char_code = &alphabet->chars[current_idx];
-                    char_code->c = header->data[current_header_idx];
-                    char_code->code.data = calloc(nbytes, sizeof(unsigned char));
-                    char_code->code.nbits = nbits;
-                    char_code->code.nbytes = nbytes;
-                    char_code->freq = 0;
-                    for (size_t k = 0; k < nbits; k++)
-                    {
-                        int bit_value = (current_code >> (nbits - 1 - k)) & 1;
-                        if (bit_value)
-                            char_code->code.data[k / CHAR_BIT] |= (1 << ((CHAR_BIT - 1) - (k % CHAR_BIT)));
-                    }
-                    current_idx += 1;
-                    PRINT_DEBUG_ALPHABET_CODE(char_code);
-                    current_header_idx += 1;
-                    current_code += 1;
-                }
-                current_code <<= 1;
+                int bit_value = (current_code >> (nbits - 1 - k)) & 1;
+                if (bit_value)
+                    char_code->code.data[k / CHAR_BIT] |= (1 << ((CHAR_BIT - 1) - (k % CHAR_BIT)));
             }
+            current_idx += 1;
+            PRINT_DEBUG_ALPHABET_CODE(char_code);
+            current_header_idx += 1;
+            current_code += 1;
         }
+        current_code <<= 1;
     }
     return 0;
 }
