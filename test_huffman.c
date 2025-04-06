@@ -9,19 +9,23 @@ void test_huffman(const char *message)
     EncodedMessage encoded_message = {
         .header = {.data = NULL, .nbits = 0, .nbytes = 0},
         .message = {.data = NULL, .nbits = 0, .nbytes = 0}};
-    huffman_encode(message, &encoded_message);
+    int status = huffman_encode(message, &encoded_message);
+    assert(status == 0);
     char data[40960] = {0};
     display_bit_message(&encoded_message.header, data);
     printf("HEADER: %s\n", data);
     display_bit_message(&encoded_message.message, data);
     printf("ENCODED MESSAGE: %s\n", data);
-    char *decoded_message = huffman_decode(&encoded_message);
+    char *decoded_message = NULL;
+    status = huffman_decode(&encoded_message, &decoded_message);
+    assert(status == 0);
     printf("DECODED MESSAGE: %s\n", decoded_message);
     assert(strlen(decoded_message) == strlen(message));
     for (size_t i = 0; message[i] != '\0'; ++i)
         assert(decoded_message[i] == message[i]);
     free_encoded_message(&encoded_message);
-    free(decoded_message);
+    if (decoded_message != NULL)
+        free(decoded_message);
 }
 
 void generate_message(char *buffer, size_t length, unsigned int redundancy)
